@@ -29,6 +29,7 @@ import { EditorRutaLazy, MapaRutaLazy } from "./mapas";
 import { cldMiniatura, duracionTxt, type TipoMedio } from "@/lib/cld";
 import { leerExif } from "@/lib/exif";
 import { leerMetaVideo } from "@/lib/video-meta";
+import { esKml, kmlAGpx } from "@/lib/kml";
 import { borrarBorrador, borrarPendiente, borrarPendientesDe, guardarBorrador, guardarPendiente, haceCuanto, leerBorrador, listarPendientes, type Borrador } from "@/lib/offline";
 
 const ETIQUETAS_SUGERIDAS = ["asfalto", "ripio", "tierra", "montaña", "paso fronterizo", "lluvia", "frío", "camping", "con acompañante", "solo", "grupal"];
@@ -375,9 +376,11 @@ export function ViajeForm({
 
   /* ───── GPX ───── */
 
-  async function cargarGpx(file: File) {
-    setGpxEstado("Leyendo GPX…");
+  async function cargarGpx(original: File) {
+    setGpxEstado(esKml(original) ? "Convirtiendo KML/KMZ…" : "Leyendo GPX…");
     try {
+      // KML/KMZ (Google Earth, Mis Mapas…) se convierte a GPX y se guarda así
+      const file = esKml(original) ? await kmlAGpx(original) : original;
       const texto = await file.text();
       const puntos = parseGpx(texto);
       if (puntos.length < 2) throw new Error("El archivo no tiene puntos de track");
@@ -798,15 +801,15 @@ export function ViajeForm({
           <div className="flex flex-wrap items-center gap-3">
             <label className="btn-ghost cursor-pointer">
               <FileUp className="size-4" />
-              {gpx ? "Reemplazar GPX" : "Subir track GPX"}
-              <input type="file" accept=".gpx,application/gpx+xml" className="hidden" onChange={(e) => e.target.files?.[0] && cargarGpx(e.target.files[0])} />
+              {gpx ? "Reemplazar recorrido" : "Subir GPX / KML / KMZ"}
+              <input type="file" accept=".gpx,.kml,.kmz,application/gpx+xml,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz" className="hidden" onChange={(e) => e.target.files?.[0] && cargarGpx(e.target.files[0])} />
             </label>
             {gpx && (
               <button type="button" onClick={() => { descartarGpxBorrador(); setGpx(null); setGpxPuntos(undefined); setGpxKm(null); }} className="text-sm text-red-400 hover:underline">
                 Quitar GPX
               </button>
             )}
-            <span className="text-xs text-niebla">{gpxEstado || "Exportalo de Strava, Wikiloc, Calimoto, Google Maps, etc."}</span>
+            <span className="text-xs text-niebla">{gpxEstado || "GPX, KML o KMZ: de Strava, Wikiloc, Calimoto, Google Earth / Mis Mapas, etc."}</span>
           </div>
           {(gpxPuntos || gpx) && (
             <div className="h-64 overflow-hidden rounded-xl border border-linea">

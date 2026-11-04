@@ -30,7 +30,7 @@ Bitácora privada de viajes: fotos, kilómetros, odómetro, ruta GPX en mapa y e
 - **Organización de fotos:** al subir se lee el EXIF en el navegador (fecha y GPS, con exifr). La galería del viaje se agrupa por día ("Día 1, Día 2…"), con filtros (fotos / videos / favoritas) y visor con fecha, ubicación y descarga. Las fotos con GPS aparecen en el mapa del recorrido. Favoritas con corazón. Página `/fotos` con todo junto, agrupado por viaje. En el formulario: arrastrar para reordenar y "Ordenar por fecha".
 - **Km:** cargás los km a mano, o se calculan del odómetro (llegada − salida) o del GPX (distancia del track).
 - **Ruta en el mapa:** en el formulario, "Marcar ruta en el mapa": tocás el mapa (o buscás un lugar por nombre, o usás Desde → Hasta) y la ruta se calcula por calles con OSRM, o en línea recta. Las paradas se arrastran, reordenan y quitan. Se guarda en `viajes.ruta` (jsonb) y autocompleta los km. En el detalle hay un link para abrirla en Google Maps.
-- **GPX:** se lee en el navegador, se dibuja en el mapa y se guarda en Cloudinary como `raw`.
+- **GPX / KML / KMZ:** los KML y KMZ (Google Earth, Mis Mapas) se convierten a GPX en el navegador. se lee en el navegador, se dibuja en el mapa y se guarda en Cloudinary como `raw`.
 - **Mapa general:** el dashboard muestra todos los recorridos juntos (ruta marcada o GPX). Capas: oscuro, satélite y topográfico.
 - **Gastos y nafta:** gastos por viaje (nafta, peajes, comida, alojamiento…) con total, $/l y costo por km; cargas de nafta por moto con consumo real por el método de tanque lleno.
 - **Mantenimiento:** registro por moto (aceite, service, cubiertas, cadena…) con intervalos en km/meses y avisos de vencido/próximo (también en el inicio). El odómetro se estima con viajes, cargas y services.
