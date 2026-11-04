@@ -32,6 +32,15 @@ Bitácora privada de viajes: fotos, kilómetros, odómetro, ruta GPX en mapa y e
 - **Ruta en el mapa:** en el formulario, "Marcar ruta en el mapa": tocás el mapa (o buscás un lugar por nombre, o usás Desde → Hasta) y la ruta se calcula por calles con OSRM, o en línea recta. Las paradas se arrastran, reordenan y quitan. Se guarda en `viajes.ruta` (jsonb) y autocompleta los km. En el detalle hay un link para abrirla en Google Maps.
 - **GPX:** se lee en el navegador, se dibuja en el mapa y se guarda en Cloudinary como `raw`.
 - **Mapa general:** el dashboard muestra todos los recorridos juntos (ruta marcada o GPX). Capas: oscuro, satélite y topográfico.
+- **Gastos y nafta:** gastos por viaje (nafta, peajes, comida, alojamiento…) con total, $/l y costo por km; cargas de nafta por moto con consumo real por el método de tanque lleno.
+- **Mantenimiento:** registro por moto (aceite, service, cubiertas, cadena…) con intervalos en km/meses y avisos de vencido/próximo (también en el inicio). El odómetro se estima con viajes, cargas y services.
+- **Sin señal:** el formulario guarda un borrador en el celular (localStorage) y las fotos elegidas sin señal quedan en IndexedDB y se suben solas al volver la señal. El service worker guarda las páginas visitadas para abrir la app offline (se borran al salir).
+- **Compartir:** link público de solo lectura  (sin notas, diario, gastos ni odómetro). Se puede desactivar.
+- **Altimetría:** perfil de altura con Open-Meteo (sin key), se calcula una vez y se guarda.
+- **Diario por día y etiquetas** (filtro en Viajes). **Estadísticas:** año a año, récords, provincias/países (de las paradas), gastos.
+- **Videos:** fecha y GPS leídos del átomo moov (iPhone y Android).
+- **Exportar:** GPX de la ruta () y backup JSON ().
+- **Seguridad:** todas las server actions verifican la sesión (): una action se puede invocar desde cualquier página, incluso las públicas.
 - **Borrar** un viaje, foto o video también lo borra de Cloudinary.
 - **Supabase:** RLS activado sin políticas → la anon key no puede acceder. Todo pasa por el servidor con la service role.
 

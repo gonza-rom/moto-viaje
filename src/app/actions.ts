@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/supabase";
 import { borrarMedios, borrarRaw } from "@/lib/cloudinary";
 import { SESSION_COOKIE, safeEqual, sessionToken } from "@/lib/auth";
+import { requerirSesion } from "@/lib/sesion";
 import { limpiarFallos, minutosBloqueo, registrarFallo } from "@/lib/limite";
 import type { FotoDraft } from "@/lib/types";
 import { parseRuta } from "@/lib/ruta";
@@ -60,6 +61,7 @@ export async function login(_prev: Estado, fd: FormData): Promise<Estado> {
 }
 
 export async function logout() {
+  await requerirSesion();
   (await cookies()).delete(SESSION_COOKIE);
   redirect("/login");
 }
@@ -116,7 +118,40 @@ function datosViaje(fd: FormData) {
     gpx_public_id: str(fd, "gpx_public_id"),
     gpx_url: str(fd, "gpx_url"),
     ruta: parseRuta(fd.get("ruta")),
+    diario: parseDiario(fd.get("diario"), fecha_inicio, fecha_fin),
+    etiquetas: parseEtiquetas(fd.get("etiquetas")),
   };
+}
+
+/** { "YYYY-MM-DD": texto } solo con días dentro del viaje y texto no vacío */
+function parseDiario(raw: FormDataEntryValue | null, inicio: string, fin: string | null) {
+  try {
+    const v = JSON.parse(String(raw || "{}"));
+    if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+    const out: Record<string, string> = {};
+    for (const [k, t] of Object.entries(v)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || typeof t !== "string" || !t.trim()) continue;
+      if (k < inicio || k > (fin || inicio)) continue;
+      out[k] = t.trim().slice(0, 5000);
+    }
+    return Object.keys(out).length ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseEtiquetas(raw: FormDataEntryValue | null): string[] {
+  try {
+    const v = JSON.parse(String(raw || "[]"));
+    if (!Array.isArray(v)) return [];
+    const limpias = v
+      .filter((t): t is string => typeof t === "string")
+      .map((t) => t.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 30))
+      .filter(Boolean);
+    return [...new Set(limpias)].slice(0, 15);
+  } catch {
+    return [];
+  }
 }
 
 function fotosDelForm(fd: FormData): FotoDraft[] {
@@ -176,6 +211,7 @@ function refrescar(id?: string) {
 /* ───────────── Viajes ───────────── */
 
 export async function crearViaje(_prev: Estado, fd: FormData): Promise<Estado> {
+  await requerirSesion();
   let id: string;
   try {
     const datos = datosViaje(fd);
@@ -202,6 +238,7 @@ export async function crearViaje(_prev: Estado, fd: FormData): Promise<Estado> {
 }
 
 export async function actualizarViaje(id: string, _prev: Estado, fd: FormData): Promise<Estado> {
+  await requerirSesion();
   try {
     const datos = datosViaje(fd);
     const fotos = fotosDelForm(fd);
@@ -248,6 +285,7 @@ export async function actualizarViaje(id: string, _prev: Estado, fd: FormData): 
 }
 
 export async function eliminarViaje(id: string) {
+  await requerirSesion();
   const { data } = await db()
     .from("viajes")
     .select("gpx_public_id, fotos(public_id, tipo)")
@@ -269,6 +307,7 @@ export async function eliminarViaje(id: string) {
 /* ───────────── Fotos ───────────── */
 
 export async function marcarFavorita(id: string, favorita: boolean): Promise<Estado> {
+  await requerirSesion();
   const { data, error } = await db().from("fotos").update({ favorita }).eq("id", id).select("viaje_id").single();
   if (error) return { error: mensaje(error, "marcar la favorita") };
   refrescar(data.viaje_id);
@@ -291,6 +330,7 @@ function datosMoto(fd: FormData) {
 }
 
 export async function crearMoto(_prev: Estado, fd: FormData): Promise<Estado> {
+  await requerirSesion();
   try {
     const { error } = await db().from("motos").insert(datosMoto(fd));
     if (error) throw error;
@@ -302,6 +342,7 @@ export async function crearMoto(_prev: Estado, fd: FormData): Promise<Estado> {
 }
 
 export async function actualizarMoto(id: string, _prev: Estado, fd: FormData): Promise<Estado> {
+  await requerirSesion();
   try {
     const { error } = await db().from("motos").update(datosMoto(fd)).eq("id", id);
     if (error) throw error;
@@ -313,6 +354,7 @@ export async function actualizarMoto(id: string, _prev: Estado, fd: FormData): P
 }
 
 export async function eliminarMoto(id: string) {
+  await requerirSesion();
   const { error } = await db().from("motos").delete().eq("id", id);
   if (error) throw new Error(mensaje(error, "borrar la moto"));
   refrescar();
@@ -325,6 +367,7 @@ export async function eliminarMoto(id: string) {
  * Solo si no está en la base (nunca borra fotos de viajes guardados).
  */
 export async function descartarSubida(publicId: string, tipo: "image" | "video" | "raw") {
+  await requerirSesion();
   if (typeof publicId !== "string" || !publicId.startsWith(`${process.env.CLOUDINARY_FOLDER || "moto-viajes"}/`)) return;
   // Ante cualquier error de la base, no borrar nada
   if (tipo === "raw") {

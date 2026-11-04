@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./supabase";
-import type { FotoConViaje, Moto, ViajeConRelaciones } from "./types";
+import type { FotoConViaje, Gasto, Mantenimiento, Moto, ViajeConRelaciones } from "./types";
 
 const SELECT_VIAJE = "*, motos(id, nombre), fotos(*)";
 
@@ -45,4 +45,30 @@ export async function getMotos(): Promise<Moto[]> {
   const { data, error } = await db().from("motos").select("*").order("created_at");
   if (error) throw new Error(error.message);
   return data as Moto[];
+}
+
+/** Gastos: de un viaje, de una moto, o todos (más nuevos primero) */
+export async function getGastos(f: { viajeId?: string } = {}): Promise<Gasto[]> {
+  let q = db().from("gastos").select("*").order("fecha", { ascending: false }).order("created_at", { ascending: false });
+  if (f.viajeId) q = q.eq("viaje_id", f.viajeId);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data as Gasto[]).map((g) => ({ ...g, monto: Number(g.monto), litros: g.litros === null ? null : Number(g.litros) }));
+}
+
+export async function getMantenimientos(): Promise<Mantenimiento[]> {
+  const { data, error } = await db().from("mantenimientos").select("*").order("fecha", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data as Mantenimiento[]).map((m) => ({ ...m, costo: m.costo === null ? null : Number(m.costo) }));
+}
+
+/** Viaje público por token (link compartido). Sin datos privados. */
+export async function getViajeCompartido(token: string): Promise<ViajeConRelaciones | null> {
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
+  const { data, error } = await db().from("viajes").select(SELECT_VIAJE).eq("compartir_token", token).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  const v = ordenarFotos(data as ViajeConRelaciones);
+  // Nada de notas, diario ni odómetro en la vista pública
+  return { ...v, notas: null, diario: null, odometro_inicio: null, odometro_fin: null };
 }

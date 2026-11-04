@@ -15,8 +15,8 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Rutas públicas: login, assets de Next, íconos y archivos de la PWA (el navegador los pide sin sesión)
+  // Rutas públicas: login, links compartidos (/c/…), assets de Next, íconos y archivos de la PWA
   matcher: [
-    "/((?!login|_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|manifest.webmanifest|sw.js|offline.html|icons/).*)",
+    "/((?!login|c/|_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|manifest.webmanifest|sw.js|offline.html|icons/).*)",
   ],
 };

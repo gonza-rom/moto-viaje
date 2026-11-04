@@ -2,6 +2,11 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // SIN_CACHE_WEBPACK=1: build sin caché en disco (útil con poco espacio libre)
+  webpack: (config) => {
+    if (process.env.SIN_CACHE_WEBPACK) config.cache = false;
+    return config;
+  },
   experimental: {
     // Las rutas marcadas pueden traer miles de puntos
     serverActions: { bodySizeLimit: "2mb" },

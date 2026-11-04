@@ -16,6 +16,11 @@ import {
   Save,
   Star,
   CalendarArrowUp,
+  History,
+  Wifi,
+  WifiOff,
+  NotebookPen,
+  Tag,
   Heart,
   MapPin,
   X,
@@ -23,12 +28,16 @@ import {
 import { EditorRutaLazy, MapaRutaLazy } from "./mapas";
 import { cldMiniatura, duracionTxt, type TipoMedio } from "@/lib/cld";
 import { leerExif } from "@/lib/exif";
+import { leerMetaVideo } from "@/lib/video-meta";
+import { borrarBorrador, borrarPendiente, borrarPendientesDe, guardarBorrador, guardarPendiente, haceCuanto, leerBorrador, listarPendientes, type Borrador } from "@/lib/offline";
+
+const ETIQUETAS_SUGERIDAS = ["asfalto", "ripio", "tierra", "montaña", "paso fronterizo", "lluvia", "frío", "camping", "con acompañante", "solo", "grupal"];
 import { fechaHoraFoto } from "@/lib/fotos";
 import { distanciaKm, parseGpx, type Punto } from "@/lib/gpx";
 import type { Ruta } from "@/lib/ruta";
 import type { FotoDraft, Moto, ViajeConRelaciones } from "@/lib/types";
 
-type Subida = { key: string; nombre: string; tipo: TipoMedio; progreso: number; error?: string; preview: string };
+type Subida = { key: string; nombre: string; tipo: TipoMedio; progreso: number; error?: string; preview: string; espera?: boolean };
 
 // Plan gratuito de Cloudinary: 100 MB por video. Ajustable si tenés otro plan.
 const MAX_VIDEO_MB = Number(process.env.NEXT_PUBLIC_CLOUDINARY_MAX_VIDEO_MB) || 100;
@@ -112,11 +121,11 @@ async function subirACloudinary(file: File, firma: Firma, onProgress: (p: number
   return res!;
 }
 
-function GuardarBtn({ pending, bloqueado, editando }: { pending: boolean; bloqueado: boolean; editando: boolean }) {
+function GuardarBtn({ pending, bloqueado, esperando, editando }: { pending: boolean; bloqueado: boolean; esperando?: boolean; editando: boolean }) {
   return (
     <button disabled={pending || bloqueado} className="btn-primary min-w-40">
       {pending || bloqueado ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}
-      {pending ? "Guardando…" : bloqueado ? "Subiendo archivos…" : editando ? "Guardar cambios" : "Guardar viaje"}
+      {pending ? "Guardando…" : bloqueado ? (esperando ? "Esperando señal…" : "Subiendo archivos…") : editando ? "Guardar cambios" : "Guardar viaje"}
     </button>
   );
 }
@@ -169,6 +178,28 @@ export function ViajeForm({
   const [origen, setOrigen] = useState(viaje?.origen ?? "");
   const [destino, setDestino] = useState(viaje?.destino ?? "");
   const [ruta, setRuta] = useState<Ruta | null>(viaje?.ruta ?? null);
+
+  // Fechas (controladas: el diario arma un día por cada fecha del viaje)
+  const [fechaIni, setFechaIni] = useState(viaje?.fecha_inicio ?? hoy);
+  const [fechaFin, setFechaFin] = useState(viaje?.fecha_fin ?? "");
+  const [diario, setDiario] = useState<Record<string, string>>(viaje?.diario ?? {});
+  const [etiquetas, setEtiquetas] = useState<string[]>(viaje?.etiquetas ?? []);
+  const [nuevaEtiqueta, setNuevaEtiqueta] = useState("");
+  const diasViaje = useMemo(() => {
+    const out: string[] = [];
+    if (!fechaIni || fechaIni.length !== 10) return out;
+    const fin = fechaFin && fechaFin >= fechaIni ? fechaFin : fechaIni;
+    const d = new Date(`${fechaIni}T00:00:00Z`);
+    while (out.length < 60) {
+      const k = d.toISOString().slice(0, 10);
+      out.push(k);
+      if (k >= fin) break;
+      d.setUTCDate(d.getUTCDate() + 1);
+    }
+    return out;
+  }, [fechaIni, fechaFin]);
+  const alternarEtiqueta = (t: string) =>
+    setEtiquetas((x) => (x.includes(t) ? x.filter((y) => y !== t) : [...x, t].slice(0, 15)));
   const [verEditor, setVerEditor] = useState(!!viaje?.ruta);
   const kmAuto = useRef<string | null>(null); // último km puesto automáticamente
 
@@ -194,6 +225,68 @@ export function ViajeForm({
 
   /* ───── Fotos ───── */
 
+  /* Clave del borrador: un borrador por viaje (o uno para "nuevo") */
+  const claveBorrador = `mv:borrador:${viaje?.id ?? "nuevo"}`;
+  const procesando = useRef(new Set<string>());
+
+  /** Sube un archivo; si no hay señal lo guarda en el celular y queda "esperando señal" */
+  async function subirUno(file: File, sub: Subida) {
+    if (procesando.current.has(sub.key)) return;
+    procesando.current.add(sub.key);
+    try {
+      if (!navigator.onLine) throw new TypeError("offline");
+      setSubidas((s) => s.map((x) => (x.key === sub.key ? { ...x, espera: false, progreso: 0 } : x)));
+      // Fecha y GPS de la foto/video, leído en el celular mientras sube
+      const meta = sub.tipo === "image" ? leerExif(file) : leerMetaVideo(file);
+      const firma = await firmar(sub.tipo === "video" ? "video" : "foto");
+      const res = await subirACloudinary(file, firma, (p) =>
+        setSubidas((s) => s.map((x) => (x.key === sub.key ? { ...x, progreso: p } : x)))
+      );
+      const datos = await meta;
+      setFotos((f) => [
+        ...f,
+        {
+          tipo: sub.tipo,
+          public_id: res.public_id,
+          width: res.width ?? null,
+          height: res.height ?? null,
+          duracion: res.duration ?? null,
+          caption: "",
+          tomada_en: datos?.tomada_en ?? null,
+          lat: datos?.lat ?? null,
+          lng: datos?.lng ?? null,
+          favorita: false,
+        },
+      ]);
+      setSubidas((s) => s.filter((x) => x.key !== sub.key));
+      URL.revokeObjectURL(sub.preview);
+      borrarPendiente(sub.key);
+    } catch (e) {
+      const sinRed = !navigator.onLine || e instanceof TypeError || (e as Error).message === "Error de red";
+      if (sinRed) {
+        // Guardar el archivo en el celular y reintentar cuando vuelva la señal
+        await guardarPendiente({ id: sub.key, borrador: claveBorrador, file, nombre: sub.nombre, tipo: sub.tipo, creado: Date.now() });
+        setSubidas((s) => s.map((x) => (x.key === sub.key ? { ...x, espera: true } : x)));
+      } else {
+        setSubidas((s) => s.map((x) => (x.key === sub.key ? { ...x, error: (e as Error).message } : x)));
+      }
+    } finally {
+      procesando.current.delete(sub.key);
+    }
+  }
+
+  /** 3 subidas en paralelo */
+  async function subirVarios(items: { file: File; sub: Subida }[]) {
+    const cola = [...items];
+    const worker = async () => {
+      while (cola.length) {
+        const { file, sub } = cola.shift()!;
+        await subirUno(file, sub);
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+  }
+
   async function agregarFotos(lista: FileList | File[]) {
     const files = Array.from(lista).filter((f) => esImagen(f) || esVideo(f));
     if (!files.length) return;
@@ -213,46 +306,31 @@ export function ViajeForm({
       };
     });
     setSubidas((s) => [...s, ...nuevas]);
-
-    // 3 subidas en paralelo
-    const cola = files.map((file, i) => ({ file, sub: nuevas[i] })).filter((x) => !x.sub.error);
-    const worker = async () => {
-      while (cola.length) {
-        const { file, sub } = cola.shift()!;
-        try {
-          // Fecha y GPS de la foto (EXIF), leído en el celular mientras sube
-          const exif = sub.tipo === "image" ? leerExif(file) : Promise.resolve(null);
-          const firma = await firmar(sub.tipo === "video" ? "video" : "foto");
-          const res = await subirACloudinary(file, firma, (p) =>
-            setSubidas((s) => s.map((x) => (x.key === sub.key ? { ...x, progreso: p } : x)))
-          );
-          const datos = await exif;
-          setFotos((f) => [
-            ...f,
-            {
-              tipo: sub.tipo,
-              public_id: res.public_id,
-              width: res.width ?? null,
-              height: res.height ?? null,
-              duracion: res.duration ?? null,
-              caption: "",
-              tomada_en: datos?.tomada_en ?? null,
-              lat: datos?.lat ?? null,
-              lng: datos?.lng ?? null,
-              favorita: false,
-            },
-          ]);
-          setSubidas((s) => s.filter((x) => x.key !== sub.key));
-          URL.revokeObjectURL(sub.preview);
-        } catch (e) {
-          setSubidas((s) =>
-            s.map((x) => (x.key === sub.key ? { ...x, error: (e as Error).message } : x))
-          );
-        }
-      }
-    };
-    await Promise.all([worker(), worker(), worker()]);
+    await subirVarios(files.map((file, i) => ({ file, sub: nuevas[i] })).filter((x) => !x.sub.error));
   }
+
+  /** Retoma los archivos guardados sin señal (al abrir el formulario y cuando vuelve la señal) */
+  // Ref con las subidas actuales (para no duplicar al retomar)
+  const subidasRef = useRef<Subida[]>([]);
+  subidasRef.current = subidas;
+
+  async function retomarPendientes() {
+    const pend = await listarPendientes(claveBorrador);
+    if (!pend.length) return;
+    const yaEstan = new Set(subidasRef.current.map((x) => x.key));
+    const nuevas: Subida[] = pend
+      .filter((p) => !yaEstan.has(p.id))
+      .map((p) => ({ key: p.id, nombre: p.nombre, tipo: p.tipo, progreso: 0, preview: URL.createObjectURL(p.file), espera: true }));
+    if (nuevas.length) setSubidas((s) => [...s, ...nuevas]);
+    if (!navigator.onLine) return;
+    const todas = [...subidasRef.current, ...nuevas];
+    await subirVarios(
+      pend
+        .map((p) => ({ file: p.file, sub: todas.find((x) => x.key === p.id) }))
+        .filter((x): x is { file: File; sub: Subida } => !!x.sub && !x.sub.error)
+    );
+  }
+
 
   const mover = (i: number, d: number) =>
     setFotos((f) => {
@@ -323,7 +401,18 @@ export function ViajeForm({
 
   /* ───── Envío, errores y cambios sin guardar ───── */
 
-  const [estado, enviar, pendiente] = useActionState(action, undefined);
+  // Si se cae la señal en el medio del envío, devolver un error en vez de romper la página
+  const accionSegura = async (prev: Estado, fd: FormData): Promise<Estado> => {
+    try {
+      return await action(prev, fd);
+    } catch (e) {
+      if (!navigator.onLine || e instanceof TypeError) {
+        return { error: "Sin señal: no se pudo guardar. Todo quedó guardado en el celular; tocá Guardar cuando vuelva la señal." };
+      }
+      throw e;
+    }
+  };
+  const [estado, enviar, pendiente] = useActionState(accionSegura, undefined);
   const [sucio, setSucio] = useState(false);
   const enviando = useRef(false);
   const errorRef = useRef<HTMLDivElement>(null);
@@ -339,6 +428,7 @@ export function ViajeForm({
   useEffect(() => {
     if (estado?.error) {
       enviando.current = false;
+      guardarBorrador(claveBorrador, datosBorrador());
       errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   }, [estado]);
@@ -366,23 +456,157 @@ export function ViajeForm({
     setFotos((x) => x.filter((_, j) => j !== i));
   }
 
+  /* ───── Borrador en el celular y sin señal ───── */
+
+  const formRef = useRef<HTMLFormElement>(null);
+  const [version, setVersion] = useState(0); // cambia con los campos no controlados (título, moto, notas)
+  const [borradorPrevio, setBorradorPrevio] = useState<Borrador | null>(null);
+  const borradorPrevioRef = useRef<Borrador | null>(null);
+  borradorPrevioRef.current = borradorPrevio;
+  const [enLinea, setEnLinea] = useState(true);
+  const [avisoSinSenal, setAvisoSinSenal] = useState(false);
+  const [editorKey, setEditorKey] = useState(0);
+  const [rutaEditor, setRutaEditor] = useState<Ruta | null>(viaje?.ruta ?? null);
+
+  useEffect(() => {
+    const previo = leerBorrador(claveBorrador);
+    if (previo) setBorradorPrevio(previo);
+    else retomarPendientes();
+    setEnLinea(navigator.onLine);
+    const on = () => {
+      setEnLinea(true);
+      if (!borradorPrevioRef.current) retomarPendientes();
+    };
+    const off = () => setEnLinea(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function datosBorrador() {
+    const f = formRef.current;
+    const val = (n: string) => (f?.elements.namedItem(n) as HTMLInputElement | null)?.value ?? "";
+    return {
+      titulo: val("titulo"),
+      moto_id: val("moto_id"),
+      notas: val("notas"),
+      fechaIni,
+      fechaFin,
+      origen,
+      destino,
+      kmTxt,
+      odoIni,
+      odoFin,
+      fotos,
+      ruta,
+      gpx,
+      diario,
+      etiquetas,
+    };
+  }
+
+  // Guardar el borrador en el celular (con una pausa) cada vez que algo cambia.
+  // No se pisa un borrador anterior hasta que el usuario elija recuperarlo o descartarlo.
+  useEffect(() => {
+    if (!sucio || borradorPrevio || enviando.current) return;
+    const t = setTimeout(() => guardarBorrador(claveBorrador, datosBorrador()), 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sucio, version, fechaIni, fechaFin, origen, destino, kmTxt, odoIni, odoFin, fotos, ruta, gpx, diario, etiquetas, borradorPrevio]);
+
+  function recuperarBorrador() {
+    const b = borradorPrevio as Borrador & ReturnType<typeof datosBorrador>;
+    if (!b) return;
+    setFotos(Array.isArray(b.fotos) ? b.fotos : []);
+    setFechaIni(b.fechaIni || hoy);
+    setFechaFin(b.fechaFin || "");
+    setOrigen(b.origen || "");
+    setDestino(b.destino || "");
+    setKmTxt(b.kmTxt || "");
+    setOdoIni(b.odoIni || "");
+    setOdoFin(b.odoFin || "");
+    setGpx(b.gpx ?? null);
+    setDiario(b.diario ?? {});
+    setEtiquetas(Array.isArray(b.etiquetas) ? b.etiquetas : []);
+    setRuta(b.ruta ?? null);
+    setRutaEditor(b.ruta ?? null);
+    setVerEditor(!!b.ruta);
+    setEditorKey((k) => k + 1);
+    const f = formRef.current;
+    for (const n of ["titulo", "moto_id", "notas"] as const) {
+      const el = f?.elements.namedItem(n) as HTMLInputElement | null;
+      if (el && typeof b[n] === "string") el.value = b[n];
+    }
+    setBorradorPrevio(null);
+    setSucio(true);
+    retomarPendientes();
+  }
+
+  function descartarBorrador() {
+    borrarBorrador(claveBorrador);
+    borrarPendientesDe(claveBorrador);
+    setBorradorPrevio(null);
+  }
+
   return (
     <form
       // Envío manual (no `action=`): React 19 vacía el formulario después de cada envío, incluso si hubo error
       onSubmit={(e) => {
         e.preventDefault();
         if (subiendo || pendiente) return;
+        if (!navigator.onLine) {
+          guardarBorrador(claveBorrador, datosBorrador());
+          setAvisoSinSenal(true);
+          return;
+        }
+        setAvisoSinSenal(false);
         enviando.current = true;
+        borrarBorrador(claveBorrador);
         const fd = new FormData(e.currentTarget);
         startTransition(() => enviar(fd));
       }}
-      onChange={() => setSucio(true)}
+      onChange={() => {
+        setSucio(true);
+        setVersion((v) => v + 1);
+      }}
+      ref={formRef}
       className="space-y-8"
     >
+      {borradorPrevio && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-naranja/40 bg-naranja/10 p-4 text-sm">
+          <History className="size-5 shrink-0 text-naranja" />
+          <p className="min-w-48 flex-1">
+            Tenés un borrador sin guardar de este {viaje ? "viaje" : "viaje nuevo"} ({haceCuanto(borradorPrevio.guardado)}).
+          </p>
+          <div className="flex gap-2">
+            <button type="button" onClick={descartarBorrador} className="btn-ghost py-1.5">Descartar</button>
+            <button type="button" onClick={recuperarBorrador} className="btn-primary py-1.5">Recuperar</button>
+          </div>
+        </div>
+      )}
+      {!enLinea && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100">
+          <WifiOff className="mt-0.5 size-5 shrink-0 text-amber-300" />
+          <p>
+            <b>Sin señal.</b> Podés seguir cargando: todo se guarda en el celular y las fotos se suben solas cuando vuelva la señal.
+          </p>
+        </div>
+      )}
+      {enLinea && avisoSinSenal && (
+        <div className="flex items-center gap-3 rounded-xl border border-green-500/40 bg-green-500/10 p-4 text-sm text-green-100">
+          <Wifi className="size-5 shrink-0 text-green-300" /> Volvió la señal: ya podés tocar Guardar.
+        </div>
+      )}
       <input type="hidden" name="fotos" value={JSON.stringify(fotos)} />
       <input type="hidden" name="gpx_public_id" value={gpx?.public_id ?? ""} />
       <input type="hidden" name="gpx_url" value={gpx?.url ?? ""} />
       <input type="hidden" name="ruta" value={ruta ? JSON.stringify(ruta) : ""} />
+      <input type="hidden" name="diario" value={JSON.stringify(diario)} />
+      <input type="hidden" name="etiquetas" value={JSON.stringify(etiquetas)} />
 
       {/* Datos */}
       <section className="card space-y-5 p-5 md:p-6">
@@ -396,11 +620,11 @@ export function ViajeForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="label" htmlFor="fecha_inicio">Salida *</label>
-            <input id="fecha_inicio" name="fecha_inicio" type="date" required defaultValue={viaje?.fecha_inicio ?? hoy} className="input" />
+            <input id="fecha_inicio" name="fecha_inicio" type="date" required value={fechaIni} onChange={(e) => setFechaIni(e.target.value)} className="input" />
           </div>
           <div>
             <label className="label" htmlFor="fecha_fin">Regreso</label>
-            <input id="fecha_fin" name="fecha_fin" type="date" defaultValue={viaje?.fecha_fin ?? ""} className="input" />
+            <input id="fecha_fin" name="fecha_fin" type="date" value={fechaFin} min={fechaIni} onChange={(e) => setFechaFin(e.target.value)} className="input" />
           </div>
           <div>
             <label className="label" htmlFor="origen">Desde</label>
@@ -434,6 +658,64 @@ export function ViajeForm({
           <label className="label" htmlFor="notas">Notas</label>
           <textarea id="notas" name="notas" rows={5} defaultValue={viaje?.notas ?? ""} placeholder="Ruta, clima, dónde cargaste nafta, dónde comiste…" className="input resize-y" />
         </div>
+
+        {/* Etiquetas */}
+        <div>
+          <p className="label flex items-center gap-1.5"><Tag className="size-3.5" /> Etiquetas</p>
+          <div className="flex flex-wrap gap-2">
+            {[...new Set([...ETIQUETAS_SUGERIDAS, ...etiquetas])].map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => alternarEtiqueta(t)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                  etiquetas.includes(t) ? "border-naranja bg-naranja/15 text-naranja" : "border-linea text-niebla hover:text-white"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+            <input
+              value={nuevaEtiqueta}
+              onChange={(e) => setNuevaEtiqueta(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                const t = nuevaEtiqueta.trim().toLowerCase();
+                if (t && !etiquetas.includes(t)) setEtiquetas((x) => [...x, t].slice(0, 15));
+                setNuevaEtiqueta("");
+              }}
+              placeholder="+ otra (Enter)"
+              className="w-32 rounded-full border border-dashed border-linea bg-transparent px-3 py-1 text-base outline-none placeholder:text-niebla/60 focus:border-naranja sm:text-xs"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Diario por día */}
+      <section className="card space-y-4 p-5 md:p-6">
+        <h2 className="flex items-center gap-2 font-display text-2xl font-bold uppercase">
+          <NotebookPen className="size-5 text-naranja" /> Diario
+        </h2>
+        <p className="-mt-2 text-xs text-niebla">Qué pasó cada día. Se muestra junto a las fotos de ese día.</p>
+        <div className="space-y-2">
+          {diasViaje.map((d, i) => (
+            <details key={d} open={!!diario[d] || diasViaje.length === 1} className="group rounded-xl border border-linea">
+              <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm [&::-webkit-details-marker]:hidden">
+                <span className="font-display text-lg font-bold uppercase">Día {i + 1}</span>
+                <span className="text-xs text-niebla">{fechaHoraFoto(`${d}T`, false)}</span>
+                {diario[d] && <span className="ml-auto size-2 rounded-full bg-naranja" title="Tiene texto" />}
+              </summary>
+              <textarea
+                value={diario[d] ?? ""}
+                onChange={(e) => setDiario((x) => ({ ...x, [d]: e.target.value }))}
+                rows={3}
+                placeholder="Ruta, paisajes, gente, anécdotas…"
+                className="block w-full resize-y rounded-b-xl border-t border-linea bg-transparent px-3 py-2.5 text-base outline-none placeholder:text-niebla/60 focus:bg-carbon sm:text-sm"
+              />
+            </details>
+          ))}
+        </div>
       </section>
 
       {/* Ruta */}
@@ -450,7 +732,8 @@ export function ViajeForm({
         </div>
         {verEditor ? (
           <EditorRutaLazy
-            inicial={viaje?.ruta ?? null}
+            key={editorKey}
+            inicial={rutaEditor}
             origen={origen}
             destino={destino}
             referencia={gpxPuntos}
@@ -654,6 +937,21 @@ export function ViajeForm({
                       <p className="text-xs text-red-400">{s.error}</p>
                       <button type="button" onClick={() => setSubidas((x) => x.filter((y) => y.key !== s.key))} className="text-xs underline">Descartar</button>
                     </div>
+                  ) : s.espera ? (
+                    <div className="space-y-1.5 text-amber-200">
+                      <WifiOff className="mx-auto size-6" />
+                      <p className="text-xs font-medium">Esperando señal</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          borrarPendiente(s.key);
+                          setSubidas((x) => x.filter((y) => y.key !== s.key));
+                        }}
+                        className="text-[11px] text-white/70 underline"
+                      >
+                        Quitar
+                      </button>
+                    </div>
                   ) : (
                     <div className="w-full space-y-2">
                       <p className="font-display text-2xl font-bold">{s.progreso}%</p>
@@ -687,7 +985,7 @@ export function ViajeForm({
         >
           Cancelar
         </Link>
-        <GuardarBtn pending={pendiente} bloqueado={subiendo} editando={!!viaje} />
+        <GuardarBtn pending={pendiente} bloqueado={subiendo} esperando={subidas.some((x) => x.espera)} editando={!!viaje} />
       </div>
     </form>
   );

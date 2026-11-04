@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { getMotos, getViajes } from "@/lib/queries";
+import { getGastos, getMantenimientos, getMotos, getViajes } from "@/lib/queries";
+import { estadosMantenimiento, odometroActual, textoFalta } from "@/lib/mantenimiento";
+import { TriangleAlert } from "lucide-react";
 import { ViajeCard } from "@/components/ViajeCard";
 import { dias, km, num, rangoFechas } from "@/lib/format";
 import { MapaViajesLazy } from "@/components/mapas";
@@ -23,7 +25,22 @@ import {
 const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
 export default async function Dashboard() {
-  const [viajes, motos] = await Promise.all([getViajes(), getMotos()]);
+  const [viajes, motos, gastos, mants] = await Promise.all([
+    getViajes(),
+    getMotos(),
+    getGastos().catch(() => []),
+    getMantenimientos().catch(() => []),
+  ]);
+
+  // Avisos de mantenimiento (vencidos o próximos) de todas las motos
+  const avisos = motos.flatMap((m) =>
+    estadosMantenimiento(
+      mants.filter((x) => x.moto_id === m.id),
+      odometroActual(m, viajes, gastos, mants)
+    )
+      .filter((e) => e.estado === "vencido" || e.estado === "pronto")
+      .map((e) => ({ ...e, moto: m.nombre }))
+  );
 
   const total = viajes.reduce((a, v) => a + v.km, 0);
   const anioActual = new Date().getFullYear();
@@ -96,6 +113,19 @@ export default async function Dashboard() {
 
   return (
     <div className="space-y-10">
+      {avisos.length > 0 && (
+        <Link href="/motos" className="block space-y-1.5 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 hover:bg-amber-500/15">
+          {avisos.slice(0, 4).map((a) => (
+            <p key={a.moto + a.tipo} className={`flex items-center gap-2 text-sm ${a.estado === "vencido" ? "text-red-300" : "text-amber-200"}`}>
+              <TriangleAlert className="size-4 shrink-0" />
+              <span>
+                <b>{a.label}</b>{motos.length > 1 && ` (${a.moto})`}: {textoFalta(a)}
+              </span>
+            </p>
+          ))}
+        </Link>
+      )}
+
       {/* Hero km totales */}
       <section className="card relative overflow-hidden p-6 md:p-8">
         <div className="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full bg-naranja/15 blur-3xl" />
@@ -110,6 +140,12 @@ export default async function Dashboard() {
             ? `${num(Math.floor((total / 40075) * 10) / 10)} vueltas a la Tierra`
             : `${num(Math.round((total / 40075) * 1000) / 10)}% de una vuelta a la Tierra`}
         </p>
+        <Link
+          href="/estadisticas"
+          className="absolute top-5 right-5 inline-flex items-center gap-1.5 rounded-full border border-linea bg-asfalto/60 px-3 py-1.5 text-xs font-semibold text-niebla hover:text-white md:top-7 md:right-7"
+        >
+          <Trophy className="size-3.5" /> Estadísticas
+        </Link>
         <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
           <Stat icono={ChartColumn} label={`En ${anioActual}`} valor={km(esteAnio)} />
           <Stat icono={Route} label="Viajes" valor={num(viajes.length)} />

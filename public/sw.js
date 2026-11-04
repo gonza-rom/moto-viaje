@@ -1,11 +1,13 @@
 // Service worker de "Mis viajes".
 // - Archivos estáticos de Next (con hash) e íconos: cache-first.
-// - Páginas: siempre de la red (los datos son privados y cambian); si no hay señal, página offline.
+// - Páginas: primero la red (los datos cambian); se guarda la última versión de cada página visitada
+//   para poder abrir la app sin señal (y cargar un viaje nuevo en la ruta). Si no hay copia: página offline.
 // - Fotos de Cloudinary: cache-first con tope, para ver viajes ya abiertos en zonas sin señal.
 
-const VERSION = "v1";
+const VERSION = "v2";
 const ESTATICOS = `estaticos-${VERSION}`;
 const FOTOS = `fotos-${VERSION}`;
+const PAGINAS = "paginas"; // se borra al cerrar sesión
 const MAX_FOTOS = 300;
 const OFFLINE = "/offline.html";
 
@@ -22,7 +24,7 @@ self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => ![ESTATICOS, FOTOS].includes(k)).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => ![ESTATICOS, FOTOS, PAGINAS].includes(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -50,9 +52,22 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
 
-  // Navegación: red, y si falla, página offline
+  // Navegación: red (guardando copia); sin señal, la última copia de esa página o la página offline
   if (req.mode === "navigate") {
-    e.respondWith(fetch(req).catch(() => caches.match(OFFLINE)));
+    const p = url.pathname;
+    const guardable =
+      url.origin === self.location.origin && !p.startsWith("/login") && !p.startsWith("/c/") && !p.startsWith("/api/");
+    e.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (guardable && res.ok && !res.redirected) {
+            const copia = res.clone();
+            caches.open(PAGINAS).then((c) => c.put(url.pathname, copia));
+          }
+          return res;
+        })
+        .catch(async () => (await caches.match(url.pathname)) || (await caches.match(OFFLINE)))
+    );
     return;
   }
 
@@ -67,4 +82,9 @@ self.addEventListener("fetch", (e) => {
   if (url.hostname === "res.cloudinary.com" && url.pathname.includes("/image/upload/")) {
     e.respondWith(cacheFirst(req, FOTOS, MAX_FOTOS));
   }
+});
+
+// Al cerrar sesión la app pide borrar las páginas guardadas (tienen datos privados)
+self.addEventListener("message", (e) => {
+  if (e.data === "cerrar-sesion") e.waitUntil(caches.delete(PAGINAS));
 });

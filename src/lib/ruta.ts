@@ -1,7 +1,7 @@
 import { distanciaKm, type Punto } from "./gpx";
 
 /** Ruta trazada a mano en el mapa (se guarda como jsonb en viajes.ruta) */
-export type Parada = { lat: number; lng: number; nombre?: string };
+export type Parada = { lat: number; lng: number; nombre?: string; provincia?: string; pais?: string };
 export type ModoRuta = "calle" | "recta";
 export type Ruta = { modo: ModoRuta; paradas: Parada[]; trazo: Punto[]; km: number };
 
@@ -72,13 +72,58 @@ export async function trazarRuta(paradas: Parada[], modo: ModoRuta, signal?: Abo
 }
 
 /** Busca un lugar por nombre (Nominatim / OpenStreetMap). Un request por búsqueda. */
+type RespNominatim = {
+  lat: string;
+  lon: string;
+  name?: string;
+  display_name: string;
+  address?: Record<string, string>;
+};
+
+const lugarDe = (a: Record<string, string> = {}) => ({
+  nombre: a.city || a.town || a.village || a.hamlet || a.municipality || a.county || a.state_district || undefined,
+  provincia: a.state || a.province || a.region || undefined,
+  pais: a.country || undefined,
+});
+
 export async function buscarLugar(q: string, signal?: AbortSignal): Promise<Parada | null> {
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=es&q=${encodeURIComponent(q)}`;
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1&accept-language=es&q=${encodeURIComponent(q)}`;
   const r = await fetch(url, { signal });
   if (!r.ok) throw new Error("No se pudo buscar el lugar");
-  const [res] = (await r.json()) as { lat: string; lon: string; name?: string; display_name: string }[];
+  const [res] = (await r.json()) as RespNominatim[];
   if (!res) return null;
-  return { lat: r5(+res.lat), lng: r5(+res.lon), nombre: res.name || res.display_name.split(",")[0] };
+  const l = lugarDe(res.address);
+  return {
+    lat: r5(+res.lat),
+    lng: r5(+res.lon),
+    nombre: res.name || l.nombre || res.display_name.split(",")[0],
+    ...(l.provincia ? { provincia: l.provincia } : {}),
+    ...(l.pais ? { pais: l.pais } : {}),
+  };
+}
+
+/**
+ * Nombre de la localidad, provincia y país de un punto (Nominatim reverse).
+ * Nominatim pide máx. 1 pedido por segundo: los pedidos se encolan.
+ */
+let colaReverse: Promise<unknown> = Promise.resolve();
+export function nombrarLugar(lat: number, lng: number): Promise<{ nombre?: string; provincia?: string; pais?: string } | null> {
+  const tarea = colaReverse.then(async () => {
+    try {
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=12&addressdetails=1&accept-language=es&lat=${lat}&lon=${lng}`
+      );
+      if (!r.ok) return null;
+      const j = (await r.json()) as RespNominatim;
+      return j?.address ? lugarDe(j.address) : null;
+    } catch {
+      return null;
+    } finally {
+      await new Promise((ok) => setTimeout(ok, 1100));
+    }
+  });
+  colaReverse = tarea;
+  return tarea;
 }
 
 /** Link a Google Maps con las mismas paradas, para volver a hacer el viaje */
@@ -108,6 +153,8 @@ export function parseRuta(raw: unknown): Ruta | null {
         lat: r5(p.lat),
         lng: r5(p.lng),
         ...(typeof p.nombre === "string" && p.nombre ? { nombre: p.nombre.slice(0, 120) } : {}),
+        ...(typeof p.provincia === "string" && p.provincia ? { provincia: p.provincia.slice(0, 80) } : {}),
+        ...(typeof p.pais === "string" && p.pais ? { pais: p.pais.slice(0, 80) } : {}),
       }));
     const trazo: Punto[] = v.trazo
       .filter((p: unknown) => Array.isArray(p) && num(p[0]) && num(p[1]))

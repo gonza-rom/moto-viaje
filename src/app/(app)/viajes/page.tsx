@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Search, SearchX } from "lucide-react";
+import { Plus, Search, SearchX, Tag, X } from "lucide-react";
 import { getMotos, getViajes } from "@/lib/queries";
 import { ViajeCard } from "@/components/ViajeCard";
 import { km } from "@/lib/format";
@@ -9,9 +9,9 @@ export const metadata = { title: "Viajes" };
 export default async function ViajesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; anio?: string; moto?: string }>;
+  searchParams: Promise<{ q?: string; anio?: string; moto?: string; etiqueta?: string }>;
 }) {
-  const { q = "", anio = "", moto = "" } = await searchParams;
+  const { q = "", anio = "", moto = "", etiqueta = "" } = await searchParams;
   const [todos, motos] = await Promise.all([getViajes(), getMotos()]);
 
   const anios = [...new Set(todos.map((v) => v.fecha_inicio.slice(0, 4)))].sort().reverse();
@@ -20,8 +20,9 @@ export default async function ViajesPage({
     (v) =>
       (!anio || v.fecha_inicio.startsWith(anio)) &&
       (!moto || v.moto_id === moto) &&
+      (!etiqueta || (v.etiquetas ?? []).includes(etiqueta)) &&
       (!texto ||
-        [v.titulo, v.origen, v.destino, v.notas].some((c) => c?.toLowerCase().includes(texto)))
+        [v.titulo, v.origen, v.destino, v.notas, ...(v.etiquetas ?? [])].some((c) => c?.toLowerCase().includes(texto)))
   );
 
   // Agrupar por año
@@ -56,9 +57,22 @@ export default async function ViajesPage({
               ))}
             </select>
           )}
+          {etiqueta && <input type="hidden" name="etiqueta" value={etiqueta} />}
           <button className="btn-ghost">Filtrar</button>
         </form>
       </div>
+
+      {etiqueta && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-niebla">Etiqueta:</span>
+          <Link
+            href={`/viajes?${new URLSearchParams({ ...(q ? { q } : {}), ...(anio ? { anio } : {}), ...(moto ? { moto } : {}) })}`}
+            className="inline-flex items-center gap-1.5 rounded-full bg-naranja/15 px-3 py-1 text-naranja hover:bg-naranja/25"
+          >
+            <Tag className="size-3.5" /> {etiqueta} <X className="size-3.5" />
+          </Link>
+        </div>
+      )}
 
       {!viajes.length && (
         <div className="card space-y-4 p-10 text-center text-niebla">

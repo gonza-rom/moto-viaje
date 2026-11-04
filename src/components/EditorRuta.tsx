@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import type { Punto } from "@/lib/gpx";
-import { MAX_PARADAS, buscarLugar, trazarRuta, type ModoRuta, type Parada, type Ruta } from "@/lib/ruta";
+import { MAX_PARADAS, buscarLugar, nombrarLugar, trazarRuta, type ModoRuta, type Parada, type Ruta } from "@/lib/ruta";
 import { CapasBase, Encuadrar, NARANJA, iconoParada, tipoParada } from "./mapa/base";
 
 const CENTRO_AR: [number, number] = [-34.6, -64.5];
@@ -73,7 +73,10 @@ export default function EditorRuta({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
-  // Recalcular el trazo cuando cambian las paradas o el modo
+  // Recalcular el trazo solo cuando cambian las coordenadas o el modo (no al ponerles nombre)
+  const claveCoords = paradas.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join(";");
+  const paradasRef = useRef(paradas);
+  paradasRef.current = paradas;
   useEffect(() => {
     if (primera.current) {
       primera.current = false;
@@ -90,7 +93,7 @@ export default function EditorRuta({
     const t = setTimeout(async () => {
       setCalculando(true);
       try {
-        const r = await trazarRuta(paradas, modo, ctrl.signal);
+        const r = await trazarRuta(paradasRef.current, modo, ctrl.signal);
         setTrazo(r.trazo);
         setKm(r.km);
         onChangeRef.current(r);
@@ -105,12 +108,32 @@ export default function EditorRuta({
       ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paradas, modo]);
+  }, [claveCoords, modo]);
+
+  // Cuando llegan los nombres de lugares, avisar al formulario sin recalcular el trazo
+  const claveNombres = paradas.map((p) => `${p.nombre ?? ""}|${p.provincia ?? ""}`).join(";");
+  const nombresIniciales = useRef(claveNombres);
+  useEffect(() => {
+    if (claveNombres === nombresIniciales.current) return;
+    if (paradas.length >= 2 && trazo.length > 1 && !calculando) onChangeRef.current({ modo, paradas, trazo, km });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claveNombres]);
+
+  /** Pone nombre, provincia y país a una parada marcada tocando el mapa */
+  function nombrar(p: Parada) {
+    nombrarLugar(p.lat, p.lng).then((l) => {
+      if (!l) return;
+      setParadas((ps) =>
+        ps.map((x) => (x.lat === p.lat && x.lng === p.lng ? { ...x, nombre: x.nombre ?? l.nombre, provincia: l.provincia, pais: l.pais } : x))
+      );
+    });
+  }
 
   const agregar = (p: Parada, encuadrar = false) => {
     if (paradas.length >= MAX_PARADAS) return setError(`Máximo ${MAX_PARADAS} paradas`);
     setParadas((ps) => insertarInteligente(ps, p));
     if (encuadrar) setEncuadre((n) => n + 1);
+    if (!p.provincia) nombrar(p);
   };
 
   async function buscar() {
@@ -289,6 +312,7 @@ export default function EditorRuta({
                 dragend: (e) => {
                   const { lat, lng } = e.target.getLatLng();
                   setParadas((ps) => ps.map((x, j) => (j === i ? { lat, lng } : x)));
+                  nombrar({ lat, lng });
                 },
               }}
             >

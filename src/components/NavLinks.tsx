@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Images, LayoutDashboard, Motorbike, Plus, Route, type LucideIcon } from "lucide-react";
+import { ChartColumn, Images, LayoutDashboard, Motorbike, Plus, Route, type LucideIcon } from "lucide-react";
 
-const LINKS: { href: string; label: string; icon: LucideIcon; mobileOnly?: boolean }[] = [
+const LINKS: { href: string; label: string; icon: LucideIcon; mobileOnly?: boolean; desktopOnly?: boolean }[] = [
   { href: "/", label: "Inicio", icon: LayoutDashboard },
   { href: "/viajes", label: "Viajes", icon: Route },
   { href: "/viajes/nuevo", label: "Nuevo", icon: Plus, mobileOnly: true },
   { href: "/fotos", label: "Fotos", icon: Images },
   { href: "/motos", label: "Motos", icon: Motorbike },
+  // En el celular se llega desde el inicio (el menú de abajo ya tiene 5)
+  { href: "/estadisticas", label: "Estadísticas", icon: ChartColumn, desktopOnly: true },
 ];
 
 export function NavLinks({ mobile = false }: { mobile?: boolean }) {
@@ -24,7 +26,7 @@ export function NavLinks({ mobile = false }: { mobile?: boolean }) {
   if (mobile) {
     return (
       <ul className="grid grid-cols-5 pb-[env(safe-area-inset-bottom)]">
-        {LINKS.map(({ href, label, icon: Icono, mobileOnly }) => (
+        {LINKS.filter((l) => !l.desktopOnly).map(({ href, label, icon: Icono, mobileOnly }) => (
           <li key={href}>
             <Link
               href={href}

@@ -15,10 +15,20 @@ import {
   Pencil,
   Route,
   Trash2,
+  BookOpen,
+  Download,
+  FileDown,
+  Share2,
+  Tag,
+  Wallet,
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
-import { getViaje } from "@/lib/queries";
+import { getGastos, getViaje } from "@/lib/queries";
+import { agruparPorDia, fechaHoraFoto } from "@/lib/fotos";
+import Altimetria from "@/components/Altimetria";
+import { PanelGastos } from "@/components/PanelGastos";
+import { CompartirViaje } from "@/components/CompartirViaje";
 import { cldMiniatura, cldSrcSet } from "@/lib/cld";
 import { dias, km, num, rangoFechas } from "@/lib/format";
 import { linkGoogleMaps } from "@/lib/ruta";
@@ -36,8 +46,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ViajePage({ params }: Props) {
   const { id } = await params;
-  const v = await getViaje(id);
+  const [v, gastos] = await Promise.all([getViaje(id), getGastos({ viajeId: id }).catch(() => [])]);
   if (!v) notFound();
+
+  // Diario: si la galería se agrupa por días, cada texto va arriba de las fotos de su día;
+  // los días sin fotos (o si no se agrupa) se muestran en la sección Diario.
+  const gruposDia = agruparPorDia(v.fotos, v.fecha_inicio);
+  const porDias = gruposDia.length > 1;
+  const diasConFotos = new Set(porDias ? gruposDia.map((g) => g.clave) : []);
+  const entradasDiario = Object.entries(v.diario ?? {})
+    .filter(([dia]) => !diasConFotos.has(dia))
+    .sort(([a], [b]) => a.localeCompare(b));
+  const nDia = (dia: string) =>
+    Math.round((Date.parse(`${dia}T00:00:00Z`) - Date.parse(`${v.fecha_inicio}T00:00:00Z`)) / 86400000) + 1;
 
   const portada = v.fotos[0];
   const d = dias(v.fecha_inicio, v.fecha_fin);
@@ -74,6 +95,19 @@ export default async function ViajePage({ params }: Props) {
               {v.origen && v.destino && <ArrowRight className="size-4" />}
               {v.destino && <span>{v.destino}</span>}
             </p>
+          )}
+          {v.etiquetas?.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {v.etiquetas.map((t) => (
+                <Link
+                  key={t}
+                  href={`/viajes?etiqueta=${encodeURIComponent(t)}`}
+                  className="inline-flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-0.5 text-xs text-white/90 backdrop-blur hover:bg-naranja hover:text-black"
+                >
+                  <Tag className="size-3" /> {t}
+                </Link>
+              ))}
+            </div>
           )}
         </div>
       </header>
@@ -116,6 +150,30 @@ export default async function ViajePage({ params }: Props) {
               ))}
             </ol>
           )}
+          {(v.gpx_url || (v.ruta && v.ruta.trazo.length > 1)) && (
+            <div className="card p-4 md:p-5">
+              <Altimetria viajeId={v.id} inicial={v.altimetria} gpxUrl={v.gpx_url} trazo={v.ruta?.trazo} />
+            </div>
+          )}
+        </section>
+      )}
+
+      {entradasDiario.length > 0 && (
+        <section className="space-y-4">
+          <h2 className="flex items-center gap-2 font-display text-3xl font-bold uppercase">
+            <BookOpen className="size-6 text-naranja" /> Diario
+          </h2>
+          <ol className="space-y-4">
+            {entradasDiario.map(([dia, texto]) => (
+              <li key={dia} className="card space-y-1 p-5">
+                <p className="flex items-baseline gap-2">
+                  <span className="font-display text-xl font-bold uppercase">Día {nDia(dia)}</span>
+                  <span className="text-xs text-niebla">{fechaHoraFoto(`${dia}T`, false)}</span>
+                </p>
+                <p className="leading-relaxed whitespace-pre-line text-white/90">{texto}</p>
+              </li>
+            ))}
+          </ol>
         </section>
       )}
 
@@ -134,9 +192,44 @@ export default async function ViajePage({ params }: Props) {
             <Images className="size-6 text-naranja" />
             {hayVideos ? "Fotos y videos" : "Fotos"} <span className="text-niebla">· {v.fotos.length}</span>
           </h2>
-          <Galeria fotos={v.fotos} titulo={v.titulo} agrupar="dia" fechaInicio={v.fecha_inicio} />
+          <Galeria
+            fotos={v.fotos}
+            titulo={v.titulo}
+            agrupar="dia"
+            fechaInicio={v.fecha_inicio}
+            diario={porDias ? v.diario : null}
+          />
         </section>
       )}
+
+      <section className="space-y-4">
+        <h2 className="flex items-center gap-2 font-display text-3xl font-bold uppercase">
+          <Wallet className="size-6 text-naranja" /> Gastos
+        </h2>
+        <PanelGastos gastos={gastos} viajeId={v.id} motoId={v.moto_id} kmViaje={v.km} fechaDefault={v.fecha_inicio} />
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2">
+        <div className="card space-y-3 p-5">
+          <h2 className="label flex items-center gap-1.5">
+            <Share2 className="size-3.5" /> Compartir
+          </h2>
+          <CompartirViaje viajeId={v.id} titulo={v.titulo} token={v.compartir_token} />
+        </div>
+        <div className="card space-y-3 p-5">
+          <h2 className="label flex items-center gap-1.5">
+            <FileDown className="size-3.5" /> Exportar
+          </h2>
+          {v.gpx_url || v.ruta ? (
+            <a href={`/api/exportar/gpx/${v.id}`} className="btn-ghost" download>
+              <Download className="size-4" /> Descargar ruta GPX
+            </a>
+          ) : (
+            <p className="text-sm text-niebla">Marcá la ruta o subí un GPX para poder exportarla.</p>
+          )}
+          <p className="text-xs text-niebla">Sirve para Google Maps (Mis mapas), Calimoto, OsmAnd, Wikiloc o el GPS.</p>
+        </div>
+      </section>
 
       <footer className="flex flex-wrap justify-between gap-3 border-t border-linea pt-6">
         <Link href="/viajes" className="btn-ghost">

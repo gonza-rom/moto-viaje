@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { logout } from "@/app/actions";
-import { LogOut, Motorbike, Plus } from "lucide-react";
+import { Motorbike, Plus } from "lucide-react";
 import { NavLinks } from "./NavLinks";
 import { InstalarApp } from "./Pwa";
+import { BotonSalir } from "./BotonSalir";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -23,12 +24,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <Link href="/viajes/nuevo" className="btn-primary hidden py-2 sm:inline-flex">
               <Plus className="size-4" /> Nuevo viaje
             </Link>
-            <form action={logout}>
-              <button className="btn-ghost px-3 py-2" title="Salir">
-                <LogOut className="size-4" />
-                <span className="hidden sm:inline">Salir</span>
-              </button>
-            </form>
+            <BotonSalir logout={logout} />
           </div>
         </div>
       </header>

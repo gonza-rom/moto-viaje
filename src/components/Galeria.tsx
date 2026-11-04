@@ -33,12 +33,18 @@ export function Galeria({
   titulo,
   agrupar = "dia",
   fechaInicio,
+  diario,
+  soloLectura = false,
 }: {
   fotos: Item[];
   titulo?: string;
   /** dia: Día 1, Día 2… (según la fecha de la foto) · viaje: por viaje (galería general) */
   agrupar?: "dia" | "viaje" | "nada";
   fechaInicio?: string;
+  /** Texto del diario por fecha: se muestra arriba de las fotos de cada día */
+  diario?: Record<string, string> | null;
+  /** Link público: sin favoritas */
+  soloLectura?: boolean;
 }) {
   const [filtro, setFiltro] = useState<Filtro>("todo");
   const [favs, setFavs] = useState<Record<string, boolean>>({});
@@ -177,6 +183,9 @@ export function Galeria({
               <span className="ml-auto text-xs text-niebla">{g.items.length}</span>
             </div>
           )}
+          {diario?.[g.clave] && (
+            <p className="border-l-2 border-naranja/60 pl-3 text-sm leading-relaxed whitespace-pre-line text-white/85">{diario[g.clave]}</p>
+          )}
           <div className="columns-2 gap-2 sm:columns-3 lg:columns-4">
             {g.items.map((f) => (
               <button
@@ -236,6 +245,7 @@ export function Galeria({
               {idx + 1} / {lista.length}
             </span>
             <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+              {!soloLectura && (
               <button
                 onClick={() => alternarFav(actual)}
                 className={`btn-ghost px-3 py-1.5 ${esFav(actual) ? "text-red-400" : ""}`}
@@ -243,6 +253,7 @@ export function Galeria({
               >
                 <Heart className={`size-4 ${esFav(actual) ? "fill-current" : ""}`} />
               </button>
+              )}
               <a href={cldOriginal(actual)} className="btn-ghost px-3 py-1.5" title="Descargar original">
                 <Download className="size-4" />
                 <span className="hidden sm:inline">Original</span>
