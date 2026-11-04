@@ -51,6 +51,15 @@ alter table public.fotos add column if not exists duracion numeric(8,2);
 alter table public.fotos drop constraint if exists fotos_tipo_check;
 alter table public.fotos add constraint fotos_tipo_check check (tipo in ('image', 'video'));
 
+-- Intentos de login fallidos (límite anti fuerza bruta)
+create table if not exists public.login_intentos (
+  id      bigint generated always as identity primary key,
+  ip      text not null,
+  creado  timestamptz not null default now()
+);
+create index if not exists login_intentos_creado_idx on public.login_intentos (creado desc);
+alter table public.login_intentos enable row level security;
+
 create index if not exists viajes_fecha_idx on public.viajes (fecha_inicio desc);
 create index if not exists viajes_moto_idx  on public.viajes (moto_id);
 create index if not exists fotos_viaje_idx  on public.fotos (viaje_id, orden);

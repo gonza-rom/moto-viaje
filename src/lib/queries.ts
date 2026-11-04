@@ -17,7 +17,10 @@ export async function getViajes(): Promise<ViajeConRelaciones[]> {
   return (data as ViajeConRelaciones[]).map(ordenarFotos);
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function getViaje(id: string): Promise<ViajeConRelaciones | null> {
+  if (!UUID.test(id)) return null; // URL inválida → 404 en vez de error de la base
   const { data, error } = await db().from("viajes").select(SELECT_VIAJE).eq("id", id).maybeSingle();
   if (error) throw new Error(error.message);
   return data ? ordenarFotos(data as ViajeConRelaciones) : null;

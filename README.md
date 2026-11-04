@@ -24,7 +24,7 @@ Bitácora privada de viajes: fotos, kilómetros, odómetro, ruta GPX en mapa y e
 ## Cómo funciona
 
 - **Íconos:** lucide-react.
-- **Login:** una sola contraseña (`APP_PASSWORD`). Cookie httpOnly firmada con HMAC, 90 días. Si cambiás la contraseña se cierran todas las sesiones.
+- **Login:** una sola contraseña (`APP_PASSWORD`). Cookie httpOnly firmada con HMAC, 90 días. Si cambiás la contraseña se cierran todas las sesiones. Límite anti fuerza bruta: 5 fallos por IP o 30 en total cada 15 min (tabla `login_intentos`).
 - **Fotos:** se suben directo del navegador a Cloudinary con firma del servidor (`/api/cloudinary/sign`), sin pasar por Vercel, así no hay límite de tamaño. Se guarda el original y se sirven optimizadas con `f_auto,q_auto` + `srcset`. HEIC del iPhone funciona.
 - **Videos:** mismo flujo (firma + subida directa), en `moto-viajes/videos`. Los de más de 20 MB se suben en partes. Se sirven con `f_auto:video,q_auto` y portada automática (`so_auto`). Límite configurable con `NEXT_PUBLIC_CLOUDINARY_MAX_VIDEO_MB` (plan gratuito: 100 MB). Un video puede ser la portada del viaje.
 - **Km:** cargás los km a mano, o se calculan del odómetro (llegada − salida) o del GPX (distancia del track).

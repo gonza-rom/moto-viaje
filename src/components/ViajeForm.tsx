@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { useFormStatus } from "react-dom";
+import { startTransition, useActionState, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { descartarSubida, type Estado } from "@/app/actions";
 import {
+  CircleAlert,
   ChevronLeft,
   ChevronRight,
   FileUp,
@@ -106,8 +107,7 @@ async function subirACloudinary(file: File, firma: Firma, onProgress: (p: number
   return res!;
 }
 
-function GuardarBtn({ bloqueado, editando }: { bloqueado: boolean; editando: boolean }) {
-  const { pending } = useFormStatus();
+function GuardarBtn({ pending, bloqueado, editando }: { pending: boolean; bloqueado: boolean; editando: boolean }) {
   return (
     <button disabled={pending || bloqueado} className="btn-primary min-w-40">
       {pending || bloqueado ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}
@@ -123,7 +123,7 @@ export function ViajeForm({
 }: {
   motos: Moto[];
   viaje?: ViajeConRelaciones;
-  action: (fd: FormData) => Promise<void>;
+  action: (prev: Estado, fd: FormData) => Promise<Estado>;
 }) {
   const hoy = new Date().toISOString().slice(0, 10);
 
@@ -270,6 +270,7 @@ export function ViajeForm({
       setGpxEstado("Subiendo GPX…");
       const firma = await firmar("gpx");
       const res = await subirACloudinary(file, firma, () => {});
+      descartarGpxBorrador();
       setGpx({ public_id: res.public_id, url: res.secure_url });
       setGpxEstado("");
     } catch (e) {
@@ -279,8 +280,64 @@ export function ViajeForm({
 
   const subiendo = subidas.some((s) => !s.error) || gpxEstado.startsWith("Subiendo");
 
+  /* ───── Envío, errores y cambios sin guardar ───── */
+
+  const [estado, enviar, pendiente] = useActionState(action, undefined);
+  const [sucio, setSucio] = useState(false);
+  const enviando = useRef(false);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const montado = useRef(false);
+
+  // Cualquier cambio en fotos, ruta o GPX marca el formulario como modificado
+  useEffect(() => {
+    if (montado.current) setSucio(true);
+    else montado.current = true;
+  }, [fotos, ruta, gpx]);
+
+  // Si volvió un error, dejar de considerar que se está enviando y mostrarlo
+  useEffect(() => {
+    if (estado?.error) {
+      enviando.current = false;
+      errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [estado]);
+
+  // Avisar antes de cerrar/recargar con cambios sin guardar
+  useEffect(() => {
+    if (!sucio && !subiendo) return;
+    const h = (e: BeforeUnloadEvent) => {
+      if (enviando.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [sucio, subiendo]);
+
+  /** Borra de Cloudinary el GPX subido en esta edición si se reemplaza o quita (no el guardado) */
+  function descartarGpxBorrador() {
+    if (gpx && gpx.public_id !== viaje?.gpx_public_id) descartarSubida(gpx.public_id, "raw").catch(() => {});
+  }
+
+  function quitarFoto(i: number) {
+    const f = fotos[i];
+    if (f && !f.id) descartarSubida(f.public_id, f.tipo).catch(() => {});
+    setFotos((x) => x.filter((_, j) => j !== i));
+  }
+
   return (
-    <form action={action} className="space-y-8">
+    <form
+      // Envío manual (no `action=`): React 19 vacía el formulario después de cada envío, incluso si hubo error
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (subiendo || pendiente) return;
+        enviando.current = true;
+        const fd = new FormData(e.currentTarget);
+        startTransition(() => enviar(fd));
+      }}
+      onChange={() => setSucio(true)}
+      className="space-y-8"
+    >
       <input type="hidden" name="fotos" value={JSON.stringify(fotos)} />
       <input type="hidden" name="gpx_public_id" value={gpx?.public_id ?? ""} />
       <input type="hidden" name="gpx_url" value={gpx?.url ?? ""} />
@@ -412,7 +469,7 @@ export function ViajeForm({
               <input type="file" accept=".gpx,application/gpx+xml" className="hidden" onChange={(e) => e.target.files?.[0] && cargarGpx(e.target.files[0])} />
             </label>
             {gpx && (
-              <button type="button" onClick={() => { setGpx(null); setGpxPuntos(undefined); setGpxKm(null); }} className="text-sm text-red-400 hover:underline">
+              <button type="button" onClick={() => { descartarGpxBorrador(); setGpx(null); setGpxPuntos(undefined); setGpxKm(null); }} className="text-sm text-red-400 hover:underline">
                 Quitar GPX
               </button>
             )}
@@ -484,7 +541,7 @@ export function ViajeForm({
                       {i !== 0 && (
                         <button type="button" onClick={() => portada(i)} className="grid size-7 place-items-center rounded-md bg-black/60" title="Hacer portada"><Star className="size-3.5" /></button>
                       )}
-                      <button type="button" onClick={() => setFotos((x) => x.filter((_, j) => j !== i))} className="grid size-7 place-items-center rounded-md bg-black/60 text-red-400" title="Quitar"><X className="size-4" /></button>
+                      <button type="button" onClick={() => quitarFoto(i)} className="grid size-7 place-items-center rounded-md bg-black/60 text-red-400" title="Quitar"><X className="size-4" /></button>
                     </div>
                   </div>
                 </div>
@@ -525,9 +582,25 @@ export function ViajeForm({
         )}
       </section>
 
-      <div className="flex items-center justify-end gap-3">
-        <Link href={viaje ? `/viajes/${viaje.id}` : "/viajes"} className="btn-ghost">Cancelar</Link>
-        <GuardarBtn bloqueado={subiendo} editando={!!viaje} />
+      {estado?.error && (
+        <div ref={errorRef} role="alert" className="flex items-start gap-3 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">
+          <CircleAlert className="mt-0.5 size-5 shrink-0 text-red-400" />
+          <p>{estado.error}</p>
+        </div>
+      )}
+
+      {/* Barra de acciones: queda pegada abajo en el celular para no tener que bajar hasta el final */}
+      <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 -mx-4 flex items-center justify-end gap-3 border-t border-linea bg-asfalto/90 px-4 py-3 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
+        <Link
+          href={viaje ? `/viajes/${viaje.id}` : "/viajes"}
+          onClick={(e) => {
+            if ((sucio || subiendo) && !window.confirm("Hay cambios sin guardar. ¿Salir igual?")) e.preventDefault();
+          }}
+          className="btn-ghost"
+        >
+          Cancelar
+        </Link>
+        <GuardarBtn pending={pendiente} bloqueado={subiendo} editando={!!viaje} />
       </div>
     </form>
   );

@@ -7,6 +7,7 @@ import {
   ArrowUp,
   CircleAlert,
   LoaderCircle,
+  LocateFixed,
   MousePointerClick,
   Route,
   Ruler,
@@ -131,6 +132,23 @@ export default function EditorRuta({
     }
   }
 
+  function miUbicacion() {
+    if (!("geolocation" in navigator)) return setError("Este dispositivo no da la ubicación");
+    setBuscando(true);
+    setError("");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setBuscando(false);
+        agregar({ lat: pos.coords.latitude, lng: pos.coords.longitude, nombre: "Mi ubicación" }, true);
+      },
+      () => {
+        setBuscando(false);
+        setError("No se pudo obtener tu ubicación (¿permiso denegado?)");
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  }
+
   async function desdeHasta() {
     setBuscando(true);
     setError("");
@@ -184,6 +202,9 @@ export default function EditorRuta({
             {buscando ? <LoaderCircle className="size-4 animate-spin" /> : <Search className="size-4" />}
           </button>
         </div>
+        <button type="button" onClick={miUbicacion} disabled={buscando} className="btn-ghost px-3" title="Agregar mi ubicación">
+          <LocateFixed className="size-4" />
+        </button>
         {origen.trim() && destino.trim() && (
           <button type="button" onClick={desdeHasta} disabled={buscando} className="btn-ghost">
             <Waypoints className="size-4" /> Desde → Hasta
