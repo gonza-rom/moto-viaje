@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   CalendarDays,
   ChartColumn,
+  DatabaseBackup,
   Fuel,
   Gauge,
   Globe,
@@ -95,7 +96,12 @@ export default async function Estadisticas() {
 
   return (
     <div className="space-y-10">
-      <h1 className="font-display text-5xl font-bold uppercase">Estadísticas</h1>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <h1 className="font-display text-5xl font-bold uppercase">Estadísticas</h1>
+        <a href="/api/exportar/backup" download className="btn-ghost py-2" title="Todos tus datos en un archivo JSON">
+          <DatabaseBackup className="size-4" /> Copia de seguridad
+        </a>
+      </div>
 
       {/* Año a año */}
       <section className="card space-y-4 p-6">
