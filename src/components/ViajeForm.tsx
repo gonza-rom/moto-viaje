@@ -426,6 +426,15 @@ export function ViajeForm({
 
   // Si volvió un error, dejar de considerar que se está enviando y mostrarlo
   useEffect(() => {
+    if (estado?.ir) {
+      // Guardado: limpiar el borrador e ir al viaje (replace: "atrás" no vuelve al formulario)
+      borrarBorrador(claveBorrador);
+      setSucio(false);
+      // Navegación completa: router.replace() desde acá queda enredado con la transición de la action
+      // y no navega. replace: "atrás" no vuelve al formulario ya guardado.
+      window.location.replace(estado.ir);
+      return;
+    }
     if (estado?.error) {
       enviando.current = false;
       guardarBorrador(claveBorrador, datosBorrador());
@@ -985,7 +994,7 @@ export function ViajeForm({
         >
           Cancelar
         </Link>
-        <GuardarBtn pending={pendiente} bloqueado={subiendo} esperando={subidas.some((x) => x.espera)} editando={!!viaje} />
+        <GuardarBtn pending={pendiente || !!estado?.ir} bloqueado={subiendo} esperando={subidas.some((x) => x.espera)} editando={!!viaje} />
       </div>
     </form>
   );

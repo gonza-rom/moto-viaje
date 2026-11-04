@@ -35,6 +35,8 @@ export function MotoForm({
 
   useEffect(() => {
     if (!estado?.ok) return;
+    // Recarga completa: la tarjeta de la moto se arma en el servidor y router.refresh() no siempre la repinta
+    setTimeout(() => window.location.reload(), 600);
     if (!moto) form.current?.reset();
     onListo?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps

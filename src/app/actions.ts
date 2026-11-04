@@ -11,7 +11,8 @@ import { limpiarFallos, minutosBloqueo, registrarFallo } from "@/lib/limite";
 import type { FotoDraft } from "@/lib/types";
 import { parseRuta } from "@/lib/ruta";
 
-export type Estado = { error?: string; ok?: string } | undefined;
+/** ir: adónde navegar después de guardar (lo hace el formulario; ver ViajeForm) */
+export type Estado = { error?: string; ok?: string; ir?: string } | undefined;
 
 /** Error con mensaje pensado para mostrarle al usuario */
 class ErrorUsuario extends Error {}
@@ -234,7 +235,9 @@ export async function crearViaje(_prev: Estado, fd: FormData): Promise<Estado> {
   }
 
   refrescar(id);
-  redirect(`/viajes/${id}`);
+  // Sin redirect(): la navegación la hace el formulario (un redirect dentro de la action
+  // envuelta deja la transición colgada en "Guardando…")
+  return { ok: "Guardado", ir: `/viajes/${id}` };
 }
 
 export async function actualizarViaje(id: string, _prev: Estado, fd: FormData): Promise<Estado> {
@@ -281,7 +284,9 @@ export async function actualizarViaje(id: string, _prev: Estado, fd: FormData): 
   }
 
   refrescar(id);
-  redirect(`/viajes/${id}`);
+  // Sin redirect(): la navegación la hace el formulario (un redirect dentro de la action
+  // envuelta deja la transición colgada en "Guardando…")
+  return { ok: "Guardado", ir: `/viajes/${id}` };
 }
 
 export async function eliminarViaje(id: string) {
@@ -310,7 +315,7 @@ export async function marcarFavorita(id: string, favorita: boolean): Promise<Est
   await requerirSesion();
   const { data, error } = await db().from("fotos").update({ favorita }).eq("id", id).select("viaje_id").single();
   if (error) return { error: mensaje(error, "marcar la favorita") };
-  refrescar(data.viaje_id);
+  void data; // sin revalidar la página actual (ver nota en acciones-extra.ts)
   return { ok: favorita ? "Agregada a favoritas" : "Quitada de favoritas" };
 }
 
@@ -337,7 +342,7 @@ export async function crearMoto(_prev: Estado, fd: FormData): Promise<Estado> {
   } catch (e) {
     return { error: mensaje(e, "agregar la moto") };
   }
-  refrescar();
+  // Sin revalidar /motos (es la página actual): MotoForm recarga la página
   return { ok: "Moto agregada" };
 }
 
@@ -349,7 +354,6 @@ export async function actualizarMoto(id: string, _prev: Estado, fd: FormData): P
   } catch (e) {
     return { error: mensaje(e, "guardar la moto") };
   }
-  refrescar();
   return { ok: "Cambios guardados" };
 }
 
@@ -357,7 +361,7 @@ export async function eliminarMoto(id: string) {
   await requerirSesion();
   const { error } = await db().from("motos").delete().eq("id", id);
   if (error) throw new Error(mensaje(error, "borrar la moto"));
-  refrescar();
+  // Sin revalidar: el botón recarga la página (ver ConfirmButton recargar)
 }
 
 /* ───────────── Limpieza de borradores ───────────── */

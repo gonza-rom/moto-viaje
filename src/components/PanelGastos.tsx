@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Check,
   CircleAlert,
@@ -32,7 +33,7 @@ const ICONOS: Record<TipoGasto, LucideIcon> = {
 const nf = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 
 export function PanelGastos({
-  gastos,
+  gastos: gastosServidor,
   viajeId,
   motoId,
   motos,
@@ -53,16 +54,27 @@ export function PanelGastos({
   const [abierto, setAbierto] = useState(false);
   const [tipo, setTipo] = useState<TipoGasto>("nafta");
   const [estado, enviar, pendiente] = useActionState(crearGasto, undefined);
+  // Lista local: lo que llega del servidor + lo recién creado − lo borrado (no depende de que la página se refresque)
+  const [nuevos, setNuevos] = useState<Gasto[]>([]);
+  const [borrados, setBorrados] = useState<string[]>([]);
   const form = useRef<HTMLFormElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (estado?.ok) {
+      if (estado.gasto) setNuevos((n) => [estado.gasto!, ...n]);
+      // Traer la lista actualizada (revalidatePath sola no refresca la vista desde useActionState)
+      router.refresh();
       form.current?.reset();
       setTipo("nafta");
       setAbierto(false);
     }
   }, [estado]);
 
+  const ids = new Set(gastosServidor.map((g) => g.id));
+  const gastos = [...nuevos.filter((g) => !ids.has(g.id)), ...gastosServidor]
+    .filter((g) => !borrados.includes(g.id))
+    .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.created_at.localeCompare(a.created_at));
   const r = resumirGastos(gastos);
   const consumo = kmViaje ? consumoViaje(kmViaje, gastos) : null;
 
@@ -115,7 +127,11 @@ export function PanelGastos({
                 <span className="font-semibold">{plata(g.monto)}</span>
                 <button
                   type="button"
-                  onClick={() => confirm("¿Borrar este gasto?") && startTransition(() => eliminarGasto(g.id))}
+                  onClick={() => confirm("¿Borrar este gasto?") && startTransition(async () => {
+                    await eliminarGasto(g.id);
+                    setBorrados((b) => [...b, g.id]);
+                    router.refresh();
+                  })}
                   className="grid size-7 place-items-center rounded-md text-niebla hover:bg-grafito hover:text-red-400"
                   title="Borrar"
                 >

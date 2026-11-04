@@ -46,6 +46,7 @@ export default async function MotosPage() {
                   action={eliminarMoto.bind(null, m.id)}
                   mensaje={`¿Borrar ${m.nombre}? Se borran su mantenimiento; los viajes quedan sin moto asignada.`}
                   className="btn-ghost px-3 py-2 text-red-400"
+                  recargar
                 >
                   <Trash2 className="size-4" />
                 </ConfirmButton>

@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Check, CircleAlert, CircleCheck, Clock, LoaderCircle, Plus, Trash2, TriangleAlert, Wrench, X } from "lucide-react";
 import { crearMantenimiento, eliminarMantenimiento } from "@/app/acciones-extra";
 import { TIPOS_MANT, estadosMantenimiento, labelMant, textoFalta } from "@/lib/mantenimiento";
@@ -20,7 +21,7 @@ const ICONO = { vencido: TriangleAlert, pronto: Clock, ok: CircleCheck, "sin-dat
 
 export function PanelMantenimiento({
   motoId,
-  mants,
+  mants: mantsServidor,
   odometro,
 }: {
   motoId: string;
@@ -31,16 +32,26 @@ export function PanelMantenimiento({
   const [tipo, setTipo] = useState("aceite");
   const [verHistorial, setVerHistorial] = useState(false);
   const [estado, enviar, pendiente] = useActionState(crearMantenimiento, undefined);
+  const [nuevos, setNuevos] = useState<Mantenimiento[]>([]);
+  const [borrados, setBorrados] = useState<string[]>([]);
   const form = useRef<HTMLFormElement>(null);
+  const router = useRouter();
   const sugerido = TIPOS_MANT.find((t) => t.valor === tipo);
 
   useEffect(() => {
     if (estado?.ok) {
+      if (estado.mant) setNuevos((n) => [estado.mant!, ...n]);
+      // Traer la lista actualizada (revalidatePath sola no refresca la vista desde useActionState)
+      router.refresh();
       form.current?.reset();
       setAbierto(false);
     }
   }, [estado]);
 
+  const ids = new Set(mantsServidor.map((x) => x.id));
+  const mants = [...nuevos.filter((x) => !ids.has(x.id)), ...mantsServidor]
+    .filter((x) => !borrados.includes(x.id))
+    .sort((a, b) => b.fecha.localeCompare(a.fecha));
   const estados = estadosMantenimiento(mants, odometro);
 
   return (
@@ -98,7 +109,11 @@ export function PanelMantenimiento({
               {m.costo !== null && <span className="text-niebla">{plata(m.costo)}</span>}
               <button
                 type="button"
-                onClick={() => confirm("¿Borrar este registro?") && startTransition(() => eliminarMantenimiento(m.id))}
+                onClick={() => confirm("¿Borrar este registro?") && startTransition(async () => {
+                    await eliminarMantenimiento(m.id);
+                    setBorrados((b) => [...b, m.id]);
+                    router.refresh();
+                  })}
                 className="grid size-7 place-items-center rounded-md text-niebla hover:bg-grafito hover:text-red-400"
                 title="Borrar"
               >

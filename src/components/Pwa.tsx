@@ -9,7 +9,16 @@ type BeforeInstallPromptEvent = Event & { prompt: () => Promise<void>; userChoic
 export function RegistrarSW() {
   useEffect(() => {
     if (process.env.NODE_ENV !== "production" || !("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then(() => navigator.serviceWorker.ready)
+      .then((reg) => {
+        // Páginas que tienen que abrir sin señal (sobre todo para cargar un viaje en la ruta)
+        if (location.pathname !== "/login" && !location.pathname.startsWith("/c/")) {
+          reg.active?.postMessage({ tipo: "precachear", urls: ["/", "/viajes/nuevo", "/viajes", "/motos", "/fotos"] });
+        }
+      })
+      .catch(() => {});
   }, []);
   return null;
 }

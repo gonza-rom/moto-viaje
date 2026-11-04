@@ -87,4 +87,19 @@ self.addEventListener("fetch", (e) => {
 // Al cerrar sesión la app pide borrar las páginas guardadas (tienen datos privados)
 self.addEventListener("message", (e) => {
   if (e.data === "cerrar-sesion") e.waitUntil(caches.delete(PAGINAS));
+  // La app pide guardar las páginas principales para que abran sin señal aunque no se hayan visitado.
+  // Si no hay sesión, el servidor redirige a /login y no se guarda nada.
+  if (e.data?.tipo === "precachear" && Array.isArray(e.data.urls)) {
+    e.waitUntil(
+      caches.open(PAGINAS).then((c) =>
+        Promise.all(
+          e.data.urls.map((u) =>
+            fetch(u, { credentials: "same-origin" })
+              .then((res) => (res.ok && !res.redirected ? c.put(new URL(u, self.location.origin).pathname, res) : null))
+              .catch(() => null)
+          )
+        )
+      )
+    );
+  }
 });

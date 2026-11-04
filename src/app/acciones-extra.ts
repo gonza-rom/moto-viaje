@@ -9,7 +9,7 @@ import { db } from "@/lib/supabase";
 import { requerirSesion } from "@/lib/sesion";
 import { TIPOS_GASTO } from "@/lib/gastos";
 import { TIPOS_MANT } from "@/lib/mantenimiento";
-import type { Altimetria } from "@/lib/types";
+import type { Altimetria, Gasto, Mantenimiento } from "@/lib/types";
 import type { Estado } from "./actions";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -34,16 +34,17 @@ const uuid = (fd: FormData, k: string) => {
   return v && UUID.test(v) ? v : null;
 };
 
-function refrescar(viajeId?: string | null) {
-  revalidatePath("/");
-  revalidatePath("/motos");
-  revalidatePath("/estadisticas");
-  if (viajeId) revalidatePath(`/viajes/${viajeId}`);
-}
+/*
+ * Estas actions se usan sin salir de la página (gastos, mantenimiento, compartir) y NO revalidan la
+ * página actual: revalidar la misma página desde una action deja la transición sin terminar y la
+ * vista no se actualiza. Cada panel agrega/quita el ítem en su propia lista, y como todas las páginas
+ * son dinámicas, al navegar se traen datos frescos.
+ */
 
 /* ───────────── Gastos ───────────── */
 
-export async function crearGasto(_prev: Estado, fd: FormData): Promise<Estado> {
+/** Devuelve el gasto creado: el panel lo agrega a su lista sin esperar a que se refresque la página */
+export async function crearGasto(_prev: Estado, fd: FormData): Promise<Estado & { gasto?: Gasto }> {
   await requerirSesion();
   try {
     const tipo = txt(fd, "tipo") ?? "nafta";
@@ -59,7 +60,7 @@ export async function crearGasto(_prev: Estado, fd: FormData): Promise<Estado> {
       moto_id = data?.moto_id ?? null;
     }
     const odo = num(fd, "odometro");
-    const { error } = await db()
+    const { data, error } = await db()
       .from("gastos")
       .insert({
         viaje_id,
@@ -72,10 +73,11 @@ export async function crearGasto(_prev: Estado, fd: FormData): Promise<Estado> {
         lleno: fd.get("lleno") === "on",
         lugar: txt(fd, "lugar", 120),
         notas: txt(fd, "notas", 500),
-      });
+      })
+      .select("*")
+      .single();
     if (error) throw error;
-    refrescar(viaje_id);
-    return { ok: "Gasto guardado" };
+    return { ok: "Gasto guardado", gasto: { ...data, monto: Number(data.monto), litros: data.litros === null ? null : Number(data.litros) } as Gasto };
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -84,12 +86,11 @@ export async function crearGasto(_prev: Estado, fd: FormData): Promise<Estado> {
 export async function eliminarGasto(id: string) {
   await requerirSesion();
   const { data } = await db().from("gastos").delete().eq("id", id).select("viaje_id").maybeSingle();
-  refrescar(data?.viaje_id);
 }
 
 /* ───────────── Mantenimiento ───────────── */
 
-export async function crearMantenimiento(_prev: Estado, fd: FormData): Promise<Estado> {
+export async function crearMantenimiento(_prev: Estado, fd: FormData): Promise<Estado & { mant?: Mantenimiento }> {
   await requerirSesion();
   try {
     const moto_id = uuid(fd, "moto_id");
@@ -99,7 +100,7 @@ export async function crearMantenimiento(_prev: Estado, fd: FormData): Promise<E
     const odo = num(fd, "odometro");
     const cadaKm = num(fd, "cada_km");
     const cadaMeses = num(fd, "cada_meses");
-    const { error } = await db()
+    const { data, error } = await db()
       .from("mantenimientos")
       .insert({
         moto_id,
@@ -110,10 +111,11 @@ export async function crearMantenimiento(_prev: Estado, fd: FormData): Promise<E
         cada_km: cadaKm === null ? null : Math.round(cadaKm),
         cada_meses: cadaMeses === null ? null : Math.round(cadaMeses),
         notas: txt(fd, "notas", 500),
-      });
+      })
+      .select("*")
+      .single();
     if (error) throw error;
-    refrescar();
-    return { ok: "Mantenimiento registrado" };
+    return { ok: "Mantenimiento registrado", mant: { ...data, costo: data.costo === null ? null : Number(data.costo) } as Mantenimiento };
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -122,7 +124,6 @@ export async function crearMantenimiento(_prev: Estado, fd: FormData): Promise<E
 export async function eliminarMantenimiento(id: string) {
   await requerirSesion();
   await db().from("mantenimientos").delete().eq("id", id);
-  refrescar();
 }
 
 /* ───────────── Compartir ───────────── */
@@ -134,7 +135,6 @@ export async function compartirViaje(id: string, activar: boolean): Promise<{ to
   const token = activar ? randomBytes(18).toString("base64url") : null;
   const { error } = await db().from("viajes").update({ compartir_token: token }).eq("id", id);
   if (error) return { token: null, error: error.message };
-  revalidatePath(`/viajes/${id}`);
   return { token };
 }
 
