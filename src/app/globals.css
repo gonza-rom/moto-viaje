@@ -52,6 +52,9 @@ body {
 .leaflet-container {
   background: #1b1d21;
   font-family: inherit;
+  /* Contexto de apilamiento propio: los paneles de Leaflet (z-index 400+) no tapan
+     la barra de guardar ni el menú inferior */
+  z-index: 0;
 }
 
 /* Marcadores de paradas en el mapa */

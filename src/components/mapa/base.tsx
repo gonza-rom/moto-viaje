@@ -3,27 +3,39 @@
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { useEffect } from "react";
-import { LayersControl, TileLayer, useMap } from "react-leaflet";
+import { LayerGroup, LayersControl, TileLayer, useMap } from "react-leaflet";
 import { cldMiniatura } from "@/lib/cld";
 
 export const NARANJA = "#ff6a1a";
 
-/** Capas de fondo: oscuro (default), satélite y topográfico. Todas gratis y sin API key. */
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
+
+/**
+ * Capas de fondo: oscuro (default), calles, satélite y topográfico. Todas gratis y sin API key.
+ * (CARTO dejó de ser libre: devuelve "API KEY REQUIRED" en vez del mapa.)
+ */
 export function CapasBase() {
   return (
     <LayersControl position="topright">
       <LayersControl.BaseLayer checked name="Oscuro">
+        <LayerGroup>
+          <TileLayer attribution="&copy; Esri, HERE, Garmin, OSM" url={`${ESRI}/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`} maxZoom={16} />
+          <TileLayer url={`${ESRI}/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`} maxZoom={16} />
+        </LayerGroup>
+      </LayersControl.BaseLayer>
+      <LayersControl.BaseLayer name="Calles">
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={19}
         />
       </LayersControl.BaseLayer>
       <LayersControl.BaseLayer name="Satélite">
-        <TileLayer
-          attribution="&copy; Esri, Maxar, Earthstar Geographics"
-          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-          maxZoom={19}
-        />
+        <LayerGroup>
+          <TileLayer attribution="&copy; Esri, Maxar, Earthstar Geographics" url={`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`} maxZoom={19} />
+          {/* Nombres de lugares y límites encima del satélite */}
+          <TileLayer url={`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`} maxZoom={19} />
+        </LayerGroup>
       </LayersControl.BaseLayer>
       <LayersControl.BaseLayer name="Topográfico">
         <TileLayer
