@@ -35,12 +35,12 @@ Bitácora privada de viajes: fotos, kilómetros, odómetro, ruta GPX en mapa y e
 - **Gastos y nafta:** gastos por viaje (nafta, peajes, comida, alojamiento…) con total, $/l y costo por km; cargas de nafta por moto con consumo real por el método de tanque lleno.
 - **Mantenimiento:** registro por moto (aceite, service, cubiertas, cadena…) con intervalos en km/meses y avisos de vencido/próximo (también en el inicio). El odómetro se estima con viajes, cargas y services.
 - **Sin señal:** el formulario guarda un borrador en el celular (localStorage) y las fotos elegidas sin señal quedan en IndexedDB y se suben solas al volver la señal. El service worker guarda las páginas visitadas para abrir la app offline (se borran al salir).
-- **Compartir:** link público de solo lectura  (sin notas, diario, gastos ni odómetro). Se puede desactivar.
+- **Compartir:** link público de solo lectura `/c/<token>` (sin notas, diario, gastos ni odómetro). Se puede desactivar.
 - **Altimetría:** perfil de altura con Open-Meteo (sin key), se calcula una vez y se guarda.
 - **Diario por día y etiquetas** (filtro en Viajes). **Estadísticas:** año a año, récords, provincias/países (de las paradas), gastos.
 - **Videos:** fecha y GPS leídos del átomo moov (iPhone y Android).
-- **Exportar:** GPX de la ruta () y backup JSON ().
-- **Seguridad:** todas las server actions verifican la sesión (): una action se puede invocar desde cualquier página, incluso las públicas.
+- **Exportar:** GPX de la ruta (`/api/exportar/gpx/<id>`) y backup JSON (`/api/exportar/backup`).
+- **Seguridad:** todas las server actions verifican la sesión (`requerirSesion`): una action se puede invocar desde cualquier página, incluso las públicas.
 - **Borrar** un viaje, foto o video también lo borra de Cloudinary.
 - **Supabase:** RLS activado sin políticas → la anon key no puede acceder. Todo pasa por el servidor con la service role.
 
