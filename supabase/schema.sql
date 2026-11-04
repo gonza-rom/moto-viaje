@@ -51,6 +51,14 @@ alter table public.fotos add column if not exists duracion numeric(8,2);
 alter table public.fotos drop constraint if exists fotos_tipo_check;
 alter table public.fotos add constraint fotos_tipo_check check (tipo in ('image', 'video'));
 
+-- Datos de la foto (EXIF): cuándo y dónde se sacó, y favoritas.
+-- tomada_en sin zona horaria: es la hora local de la cámara.
+alter table public.fotos add column if not exists tomada_en timestamp;
+alter table public.fotos add column if not exists lat double precision;
+alter table public.fotos add column if not exists lng double precision;
+alter table public.fotos add column if not exists favorita boolean not null default false;
+create index if not exists fotos_favorita_idx on public.fotos (favorita) where favorita;
+
 -- Intentos de login fallidos (límite anti fuerza bruta)
 create table if not exists public.login_intentos (
   id      bigint generated always as identity primary key,

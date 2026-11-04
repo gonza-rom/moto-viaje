@@ -20,6 +20,16 @@ export type Foto = {
   duracion: number | null;
   caption: string | null;
   orden: number;
+  /** Fecha/hora local en que se sacó (EXIF), "YYYY-MM-DDTHH:mm:ss" */
+  tomada_en: string | null;
+  lat: number | null;
+  lng: number | null;
+  favorita: boolean;
+};
+
+/** Foto con datos de su viaje (galería general) */
+export type FotoConViaje = Foto & {
+  viajes: Pick<Viaje, "id" | "titulo" | "fecha_inicio" | "fecha_fin" | "moto_id"> | null;
 };
 
 export type Viaje = {
@@ -54,4 +64,8 @@ export type FotoDraft = {
   height: number | null;
   duracion: number | null;
   caption: string;
+  tomada_en: string | null;
+  lat: number | null;
+  lng: number | null;
+  favorita: boolean;
 };

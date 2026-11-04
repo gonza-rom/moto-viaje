@@ -125,7 +125,25 @@ function fotosDelForm(fd: FormData): FotoDraft[] {
     if (!Array.isArray(arr)) return [];
     return arr
       .filter((f) => typeof f?.public_id === "string")
-      .map((f) => ({ ...f, tipo: f.tipo === "video" ? "video" : "image", duracion: Number(f.duracion) || null }));
+      .map((f) => {
+        const coord = (n: unknown, max: number) =>
+          typeof n === "number" && Number.isFinite(n) && Math.abs(n) <= max ? n : null;
+        const lat = coord(f.lat, 90);
+        const lng = coord(f.lng, 180);
+        const conGps = lat !== null && lng !== null;
+        return {
+          ...f,
+          tipo: f.tipo === "video" ? "video" : "image",
+          duracion: Number(f.duracion) || null,
+          tomada_en:
+            typeof f.tomada_en === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(f.tomada_en)
+              ? f.tomada_en
+              : null,
+          lat: conGps ? lat : null,
+          lng: conGps ? lng : null,
+          favorita: f.favorita === true,
+        };
+      });
   } catch {
     return [];
   }
@@ -141,12 +159,17 @@ const filaFoto = (viaje_id: string) => (f: FotoDraft, i: number) => ({
   duracion: f.duracion,
   caption: f.caption?.trim().slice(0, 500) || null,
   orden: i,
+  tomada_en: f.tomada_en,
+  lat: f.lat,
+  lng: f.lng,
+  favorita: f.favorita,
 });
 
 function refrescar(id?: string) {
   revalidatePath("/");
   revalidatePath("/viajes");
   revalidatePath("/motos");
+  revalidatePath("/fotos");
   if (id) revalidatePath(`/viajes/${id}`);
 }
 
@@ -241,6 +264,15 @@ export async function eliminarViaje(id: string) {
 
   refrescar();
   redirect("/viajes");
+}
+
+/* ───────────── Fotos ───────────── */
+
+export async function marcarFavorita(id: string, favorita: boolean): Promise<Estado> {
+  const { data, error } = await db().from("fotos").update({ favorita }).eq("id", id).select("viaje_id").single();
+  if (error) return { error: mensaje(error, "marcar la favorita") };
+  refrescar(data.viaje_id);
+  return { ok: favorita ? "Agregada a favoritas" : "Quitada de favoritas" };
 }
 
 /* ───────────── Motos ───────────── */

@@ -4,6 +4,7 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { useEffect } from "react";
 import { LayersControl, TileLayer, useMap } from "react-leaflet";
+import { cldMiniatura } from "@/lib/cld";
 
 export const NARANJA = "#ff6a1a";
 
@@ -66,3 +67,14 @@ export function MapaVacio({ children }: { children: React.ReactNode }) {
 /** En celulares, los mapas de solo lectura no capturan el arrastre con un dedo (si no, la página no scrollea).
  *  Se hace zoom con dos dedos. */
 export const esTactil = () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+
+/** Marcador con la miniatura de una foto */
+export function iconoFoto(f: { public_id: string; tipo: "image" | "video" }) {
+  const src = cldMiniatura(f, { w: 80, h: 80, crop: "fill" });
+  return L.divIcon({
+    className: "",
+    html: `<div class="marcador-foto${f.tipo === "video" ? " es-video" : ""}"><img src="${src}" alt="" loading="lazy" /></div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  });
+}

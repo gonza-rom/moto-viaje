@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Motorbike, Plus, Route, type LucideIcon } from "lucide-react";
+import { Images, LayoutDashboard, Motorbike, Plus, Route, type LucideIcon } from "lucide-react";
 
 const LINKS: { href: string; label: string; icon: LucideIcon; mobileOnly?: boolean }[] = [
   { href: "/", label: "Inicio", icon: LayoutDashboard },
   { href: "/viajes", label: "Viajes", icon: Route },
   { href: "/viajes/nuevo", label: "Nuevo", icon: Plus, mobileOnly: true },
+  { href: "/fotos", label: "Fotos", icon: Images },
   { href: "/motos", label: "Motos", icon: Motorbike },
 ];
 
@@ -22,7 +23,7 @@ export function NavLinks({ mobile = false }: { mobile?: boolean }) {
 
   if (mobile) {
     return (
-      <ul className="grid grid-cols-4 pb-[env(safe-area-inset-bottom)]">
+      <ul className="grid grid-cols-5 pb-[env(safe-area-inset-bottom)]">
         {LINKS.map(({ href, label, icon: Icono, mobileOnly }) => (
           <li key={href}>
             <Link

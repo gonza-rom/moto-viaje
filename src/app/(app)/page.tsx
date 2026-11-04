@@ -3,6 +3,7 @@ import { getMotos, getViajes } from "@/lib/queries";
 import { ViajeCard } from "@/components/ViajeCard";
 import { dias, km, num, rangoFechas } from "@/lib/format";
 import { MapaViajesLazy } from "@/components/mapas";
+import { cldMiniatura } from "@/lib/cld";
 import type { ViajeEnMapa } from "@/components/MapaViajes";
 import {
   ArrowRight,
@@ -10,6 +11,7 @@ import {
   Camera,
   ChartColumn,
   Globe,
+  Heart,
   Map as MapIcon,
   Motorbike,
   Plus,
@@ -60,6 +62,11 @@ export default async function Dashboard() {
         gpx_url: v.gpx_url,
       };
     });
+
+  // Favoritas de todos los viajes (máx. 12, de los viajes más nuevos)
+  const favoritas = viajes
+    .flatMap((v) => v.fotos.filter((f) => f.favorita).map((f) => ({ ...f, titulo: v.titulo })))
+    .slice(0, 12);
 
   const porMoto = motos
     .map((m) => ({ ...m, km: viajes.filter((v) => v.moto_id === m.id).reduce((a, v) => a + v.km, 0) }))
@@ -118,6 +125,38 @@ export default async function Dashboard() {
           </h2>
           <div className="h-80 overflow-hidden rounded-2xl border border-linea md:h-[26rem]">
             <MapaViajesLazy viajes={enMapa} />
+          </div>
+        </section>
+      )}
+
+      {favoritas.length > 0 && (
+        <section className="space-y-4">
+          <div className="flex items-end justify-between">
+            <h2 className="flex items-center gap-2 font-display text-3xl font-bold uppercase">
+              <Heart className="size-6 text-naranja" /> Favoritas
+            </h2>
+            <Link href="/fotos" className="flex items-center gap-1 text-sm text-niebla hover:text-white">
+              Todas las fotos <ArrowRight className="size-4" />
+            </Link>
+          </div>
+          <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
+            {favoritas.map((f) => (
+              <Link
+                key={f.id}
+                href={`/viajes/${f.viaje_id}`}
+                className="group relative w-40 shrink-0 snap-start overflow-hidden rounded-xl bg-grafito md:w-48"
+              >
+                <img
+                  src={cldMiniatura(f, { w: 400, h: 500, crop: "fill" })}
+                  alt={f.caption || f.titulo}
+                  loading="lazy"
+                  className="aspect-[4/5] w-full object-cover transition duration-500 group-hover:scale-105"
+                />
+                <span className="absolute inset-x-0 bottom-0 line-clamp-1 bg-gradient-to-t from-black/85 to-transparent px-2.5 pt-8 pb-2 text-xs text-white">
+                  {f.caption || f.titulo}
+                </span>
+              </Link>
+            ))}
           </div>
         </section>
       )}

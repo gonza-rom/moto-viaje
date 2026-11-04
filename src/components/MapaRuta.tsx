@@ -4,7 +4,14 @@ import { useEffect, useState } from "react";
 import { CircleMarker, MapContainer, Marker, Polyline, Tooltip } from "react-leaflet";
 import { parseGpx, type Punto } from "@/lib/gpx";
 import type { Ruta } from "@/lib/ruta";
-import { CapasBase, MapaVacio, NARANJA, esTactil, iconoParada, tipoParada } from "./mapa/base";
+import type { TipoMedio } from "@/lib/cld";
+import { CapasBase, MapaVacio, NARANJA, esTactil, iconoFoto, iconoParada, tipoParada } from "./mapa/base";
+
+/** Foto con ubicación para mostrar como marcador */
+export type FotoEnMapa = { id: string; public_id: string; tipo: TipoMedio; lat: number; lng: number; caption?: string | null };
+
+/** Mismo nombre de evento que usa la Galería para abrir el visor */
+const EVENTO_ABRIR_FOTO = "mv:abrir-foto";
 
 /**
  * Muestra el recorrido de un viaje: el GPX real (si hay) y/o la ruta trazada a mano.
@@ -14,10 +21,12 @@ export default function MapaRuta({
   url,
   puntos: puntosIniciales,
   ruta,
+  fotos = [],
 }: {
   url?: string | null;
   puntos?: Punto[];
   ruta?: Ruta | null;
+  fotos?: FotoEnMapa[];
 }) {
   const [gpx, setGpx] = useState<Punto[] | null>(puntosIniciales ?? null);
   const [estado, setEstado] = useState<"ok" | "cargando" | "error">(url && !puntosIniciales ? "cargando" : "ok");
@@ -51,11 +60,13 @@ export default function MapaRuta({
   const linea = gpx && gpx.length > 1 ? gpx.filter((_, i) => i % paso === 0 || i === gpx.length - 1) : null;
   const trazo = ruta?.trazo && ruta.trazo.length > 1 ? ruta.trazo : null;
 
-  if (!linea && !trazo) {
+  if (!linea && !trazo && !fotos.length) {
     return <MapaVacio>{estado === "error" ? "No se pudo cargar la ruta" : "El recorrido no tiene puntos"}</MapaVacio>;
   }
 
-  const bounds = [...(linea ?? []), ...(trazo ?? [])] as [number, number][];
+  const bounds = [...(linea ?? []), ...(trazo ?? []), ...fotos.map((f) => [f.lat, f.lng])] as [number, number][];
+  // Un solo punto: Leaflet necesita un área, se arma una cajita alrededor
+  if (bounds.length === 1) bounds.push([bounds[0][0] + 0.02, bounds[0][1] + 0.02], [bounds[0][0] - 0.02, bounds[0][1] - 0.02]);
 
   return (
     <MapContainer bounds={bounds} boundsOptions={{ padding: [28, 28] }} scrollWheelZoom={false} dragging={!esTactil()} className="size-full">
@@ -93,6 +104,17 @@ export default function MapaRuta({
               </CircleMarker>
             </>
           )}
+
+      {fotos.map((f) => (
+        <Marker
+          key={f.id}
+          position={[f.lat, f.lng]}
+          icon={iconoFoto(f)}
+          eventHandlers={{ click: () => window.dispatchEvent(new CustomEvent(EVENTO_ABRIR_FOTO, { detail: f.id })) }}
+        >
+          {f.caption && <Tooltip>{f.caption}</Tooltip>}
+        </Marker>
+      ))}
     </MapContainer>
   );
 }

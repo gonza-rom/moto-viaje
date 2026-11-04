@@ -15,10 +15,15 @@ import {
   Play,
   Save,
   Star,
+  CalendarArrowUp,
+  Heart,
+  MapPin,
   X,
 } from "lucide-react";
 import { EditorRutaLazy, MapaRutaLazy } from "./mapas";
 import { cldMiniatura, duracionTxt, type TipoMedio } from "@/lib/cld";
+import { leerExif } from "@/lib/exif";
+import { fechaHoraFoto } from "@/lib/fotos";
 import { distanciaKm, parseGpx, type Punto } from "@/lib/gpx";
 import type { Ruta } from "@/lib/ruta";
 import type { FotoDraft, Moto, ViajeConRelaciones } from "@/lib/types";
@@ -137,6 +142,10 @@ export function ViajeForm({
         height: f.height,
         duracion: f.duracion,
         caption: f.caption || "",
+        tomada_en: f.tomada_en ?? null,
+        lat: f.lat ?? null,
+        lng: f.lng ?? null,
+        favorita: f.favorita ?? false,
       })) ?? []
   );
   const [subidas, setSubidas] = useState<Subida[]>([]);
@@ -211,10 +220,13 @@ export function ViajeForm({
       while (cola.length) {
         const { file, sub } = cola.shift()!;
         try {
+          // Fecha y GPS de la foto (EXIF), leído en el celular mientras sube
+          const exif = sub.tipo === "image" ? leerExif(file) : Promise.resolve(null);
           const firma = await firmar(sub.tipo === "video" ? "video" : "foto");
           const res = await subirACloudinary(file, firma, (p) =>
             setSubidas((s) => s.map((x) => (x.key === sub.key ? { ...x, progreso: p } : x)))
           );
+          const datos = await exif;
           setFotos((f) => [
             ...f,
             {
@@ -224,6 +236,10 @@ export function ViajeForm({
               height: res.height ?? null,
               duracion: res.duration ?? null,
               caption: "",
+              tomada_en: datos?.tomada_en ?? null,
+              lat: datos?.lat ?? null,
+              lng: datos?.lng ?? null,
+              favorita: false,
             },
           ]);
           setSubidas((s) => s.filter((x) => x.key !== sub.key));
@@ -253,6 +269,31 @@ export function ViajeForm({
       const [x] = c.splice(i, 1);
       return [x, ...c];
     });
+
+  /** Mover de una posición a otra (arrastrar y soltar) */
+  const moverA = (de: number, a: number) =>
+    setFotos((f) => {
+      if (de === a || de < 0 || a < 0 || de >= f.length || a >= f.length) return f;
+      const c = [...f];
+      const [x] = c.splice(de, 1);
+      c.splice(a, 0, x);
+      return c;
+    });
+  const [arrastrando, setArrastrando] = useState<number | null>(null);
+
+  /** Orden cronológico según la fecha de la foto; la portada queda primera */
+  const ordenarPorFecha = () =>
+    setFotos((f) => {
+      const [primera, ...resto] = f;
+      const ordenadas = [...resto].sort((a, b) =>
+        a.tomada_en && b.tomada_en ? a.tomada_en.localeCompare(b.tomada_en) : a.tomada_en ? -1 : b.tomada_en ? 1 : 0
+      );
+      return primera ? [primera, ...ordenadas] : f;
+    });
+  const conFecha = fotos.filter((f) => f.tomada_en).length;
+
+  const alternarFavorita = (i: number) =>
+    setFotos((x) => x.map((y, j) => (j === i ? { ...y, favorita: !y.favorita } : y)));
 
   /* ───── GPX ───── */
 
@@ -485,11 +526,18 @@ export function ViajeForm({
 
       {/* Fotos */}
       <section className="card space-y-5 p-5 md:p-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 font-display text-2xl font-bold uppercase">
             <ImagePlus className="size-5 text-naranja" /> Fotos y videos
           </h2>
-          <span className="text-xs text-niebla">{fotos.length} · la primera es la portada</span>
+          <div className="flex items-center gap-3">
+            {conFecha >= 2 && (
+              <button type="button" onClick={ordenarPorFecha} className="btn-ghost px-3 py-1.5 text-xs">
+                <CalendarArrowUp className="size-3.5" /> Ordenar por fecha
+              </button>
+            )}
+            <span className="text-xs text-niebla">{fotos.length} · la primera es la portada</span>
+          </div>
         </div>
 
         <div
@@ -521,9 +569,48 @@ export function ViajeForm({
         {(fotos.length > 0 || subidas.length > 0) && (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {fotos.map((f, i) => (
-              <li key={f.public_id} className="overflow-hidden rounded-xl border border-linea bg-grafito">
+              <li
+                key={f.public_id}
+                // Reordenar arrastrando (en computadora; en el celular están las flechas)
+                draggable
+                onDragStart={(e) => {
+                  setArrastrando(i);
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/x-mv-foto", String(i));
+                }}
+                onDragOver={(e) => {
+                  if (arrastrando === null) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onDrop={(e) => {
+                  if (arrastrando === null) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  moverA(arrastrando, i);
+                  setArrastrando(null);
+                }}
+                onDragEnd={() => setArrastrando(null)}
+                className={`overflow-hidden rounded-xl border bg-grafito transition ${
+                  arrastrando === i ? "border-naranja opacity-40" : "border-linea"
+                } ${arrastrando !== null ? "cursor-grabbing" : "cursor-grab"}`}
+              >
                 <div className="relative aspect-square">
-                  <img src={cldMiniatura(f, { w: 400, h: 400, crop: "fill" })} alt="" className="size-full object-cover" />
+                  <img src={cldMiniatura(f, { w: 400, h: 400, crop: "fill" })} alt="" draggable={false} className="size-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => alternarFavorita(i)}
+                    className={`absolute bottom-11 left-1.5 grid size-7 place-items-center rounded-md bg-black/60 ${f.favorita ? "text-red-400" : "text-white/70"}`}
+                    title={f.favorita ? "Quitar de favoritas" : "Marcar como favorita"}
+                  >
+                    <Heart className={`size-3.5 ${f.favorita ? "fill-current" : ""}`} />
+                  </button>
+                  {(f.tomada_en || f.lat != null) && (
+                    <span className="absolute right-1.5 bottom-11 inline-flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-1 text-[10px] text-white/80">
+                      {f.lat != null && <MapPin className="size-3" />}
+                      {f.tomada_en && fechaHoraFoto(f.tomada_en, false)}
+                    </span>
+                  )}
                   {f.tipo === "video" && (
                     <span className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white">
                       <Play className="size-2.5 fill-current" /> {duracionTxt(f.duracion)}

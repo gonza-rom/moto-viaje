@@ -43,6 +43,9 @@ export default async function ViajePage({ params }: Props) {
   const d = dias(v.fecha_inicio, v.fecha_fin);
   const gmaps = v.ruta ? linkGoogleMaps(v.ruta.paradas) : null;
   const hayVideos = v.fotos.some((f) => f.tipo === "video");
+  const fotosGps = v.fotos
+    .filter((f) => f.lat != null && f.lng != null)
+    .map((f) => ({ id: f.id, public_id: f.public_id, tipo: f.tipo, lat: f.lat!, lng: f.lng!, caption: f.caption }));
 
   return (
     <article className="space-y-8">
@@ -86,7 +89,7 @@ export default async function ViajePage({ params }: Props) {
         {v.ruta && <Dato icono={Milestone} label="Paradas" valor={num(v.ruta.paradas.length)} />}
       </section>
 
-      {(v.gpx_url || v.ruta) && (
+      {(v.gpx_url || v.ruta || fotosGps.length > 0) && (
         <section className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 font-display text-3xl font-bold uppercase">
@@ -99,7 +102,7 @@ export default async function ViajePage({ params }: Props) {
             )}
           </div>
           <div className="h-80 overflow-hidden rounded-2xl border border-linea md:h-[28rem]">
-            <MapaRutaLazy url={v.gpx_url} ruta={v.ruta} />
+            <MapaRutaLazy url={v.gpx_url} ruta={v.ruta} fotos={fotosGps} />
           </div>
           {v.ruta && v.ruta.paradas.some((p) => p.nombre) && (
             <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-niebla">
@@ -131,7 +134,7 @@ export default async function ViajePage({ params }: Props) {
             <Images className="size-6 text-naranja" />
             {hayVideos ? "Fotos y videos" : "Fotos"} <span className="text-niebla">· {v.fotos.length}</span>
           </h2>
-          <Galeria fotos={v.fotos} titulo={v.titulo} />
+          <Galeria fotos={v.fotos} titulo={v.titulo} agrupar="dia" fechaInicio={v.fecha_inicio} />
         </section>
       )}
 
