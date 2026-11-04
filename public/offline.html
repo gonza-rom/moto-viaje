@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es-AR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0e0f11" />
+    <title>Sin conexión · Mis viajes</title>
+    <style>
+      html,body{margin:0;height:100%;background:#0e0f11;color:#e9eaec;font-family:system-ui,-apple-system,sans-serif}
+      main{min-height:100%;display:grid;place-items:center;padding:24px;text-align:center}
+      .logo{width:64px;height:64px;margin:0 auto 20px;border-radius:16px}
+      h1{margin:0 0 8px;font-size:28px;text-transform:uppercase;letter-spacing:.02em}
+      p{margin:0 0 24px;color:#9aa0a8}
+      button{border:0;border-radius:10px;padding:12px 20px;background:#ff6a1a;color:#000;font-weight:600;font-size:15px}
+    </style>
+  </head>
+  <body>
+    <main>
+      <div>
+        <img class="logo" src="/icons/icon-192.png" alt="" />
+        <h1>Sin señal</h1>
+        <p>No hay conexión. Las fotos que ya viste quedan guardadas;<br />volvé a intentar cuando tengas señal.</p>
+        <button onclick="location.reload()">Reintentar</button>
+      </div>
+    </main>
+  </body>
+</html>
