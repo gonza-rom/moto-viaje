@@ -4,23 +4,40 @@ import { getFotos, getMotos } from "@/lib/queries";
 import { num } from "@/lib/format";
 import { Galeria } from "@/components/Galeria";
 import { MapaRutaLazy } from "@/components/mapas";
+import { DetectarLugares } from "@/components/DetectarLugares";
 
 export const metadata = { title: "Fotos" };
 
 export default async function FotosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ anio?: string; moto?: string }>;
+  searchParams: Promise<{ anio?: string; moto?: string; lugar?: string }>;
 }) {
-  const { anio = "", moto = "" } = await searchParams;
+  const { anio = "", moto = "", lugar = "" } = await searchParams;
   const [todas, motos] = await Promise.all([getFotos(), getMotos()]);
 
   const anios = [...new Set(todas.map((f) => f.viajes?.fecha_inicio.slice(0, 4)).filter(Boolean) as string[])]
     .sort()
     .reverse();
-  const fotos = todas.filter(
+  const porAnioMoto = todas.filter(
     (f) => (!anio || f.viajes?.fecha_inicio.startsWith(anio)) && (!moto || f.viajes?.moto_id === moto)
   );
+  const fotos = porAnioMoto.filter((f) => !lugar || f.lugar === lugar);
+
+  // Lugares donde sacaste fotos (de más a menos fotos)
+  const lugares = new Map<string, { provincia: string | null; n: number }>();
+  for (const f of porAnioMoto) {
+    if (!f.lugar) continue;
+    const l = lugares.get(f.lugar) ?? { provincia: f.provincia, n: 0 };
+    l.n++;
+    lugares.set(f.lugar, l);
+  }
+  const listaLugares = [...lugares.entries()].sort((a, b) => b[1].n - a[1].n || a[0].localeCompare(b[0], "es"));
+  const pendientes = todas.filter((f) => f.lat != null && f.lng != null && f.lugar == null).length;
+  const urlLugar = (l: string) => {
+    const q = new URLSearchParams({ ...(anio ? { anio } : {}), ...(moto ? { moto } : {}), ...(l ? { lugar: l } : {}) });
+    return `/fotos${q.size ? `?${q}` : ""}`;
+  };
 
   const nVideos = fotos.filter((f) => f.tipo === "video").length;
   const nFavs = fotos.filter((f) => f.favorita).length;
@@ -91,6 +108,36 @@ export default async function FotosPage({
           </form>
         )}
       </div>
+
+      <DetectarLugares pendientes={pendientes} />
+
+      {listaLugares.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="label flex items-center gap-1.5">
+            <MapPin className="size-3.5" /> {listaLugares.length} {listaLugares.length === 1 ? "lugar" : "lugares"} · tocá uno para ver
+            sus fotos
+          </h2>
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:px-0">
+            {lugar && (
+              <Link href={urlLugar("")} className="shrink-0 rounded-full border border-naranja px-3 py-1.5 text-xs font-semibold text-naranja">
+                ✕ {lugar}
+              </Link>
+            )}
+            {listaLugares
+              .filter(([l]) => l !== lugar)
+              .map(([l, { provincia, n }]) => (
+                <Link
+                  key={l}
+                  href={urlLugar(l)}
+                  title={provincia ?? undefined}
+                  className="shrink-0 rounded-full border border-linea px-3 py-1.5 text-xs font-medium text-niebla transition hover:border-naranja/60 hover:text-white"
+                >
+                  {l} <span className="opacity-60">{n}</span>
+                </Link>
+              ))}
+          </div>
+        </section>
+      )}
 
       {conGps.length > 0 && (
         <section className="space-y-2">

@@ -68,10 +68,11 @@ export default async function Estadisticas() {
     { icono: ArrowUpRight, label: "Más subida acumulada", r: mayor(viajes, (v) => v.altimetria?.subida ?? null), fmt: (n) => `${num(n)} m` },
   ];
 
-  // Lugares (de las paradas de las rutas marcadas)
+  // Lugares (de las paradas de las rutas marcadas y de dónde se sacaron las fotos)
   const lugares = new Map<string, Map<string, Set<string>>>(); // país → provincia → viajes
   for (const v of viajes) {
-    for (const p of v.ruta?.paradas ?? []) {
+    const conProvincia = [...(v.ruta?.paradas ?? []), ...v.fotos.map((f) => ({ provincia: f.provincia, pais: f.pais }))];
+    for (const p of conProvincia) {
       if (!p.provincia) continue;
       const pais = p.pais ?? "—";
       if (!lugares.has(pais)) lugares.set(pais, new Map());
@@ -203,7 +204,7 @@ export default async function Estadisticas() {
             </>
           ) : (
             <p className="text-sm text-niebla">
-              Se completa con las paradas de las rutas que marques en el mapa (provincia y país de cada una).
+              Se completa con las paradas de las rutas que marques en el mapa y con la ubicación de las fotos.
             </p>
           )}
         </section>

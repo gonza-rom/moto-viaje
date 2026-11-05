@@ -30,6 +30,7 @@ import { cldMiniatura, duracionTxt, type TipoMedio } from "@/lib/cld";
 import { leerExif } from "@/lib/exif";
 import { leerMetaVideo } from "@/lib/video-meta";
 import { esKml, kmlAGpx } from "@/lib/kml";
+import { CATEGORIAS } from "@/lib/categorias";
 import { borrarBorrador, borrarPendiente, borrarPendientesDe, guardarBorrador, guardarPendiente, haceCuanto, leerBorrador, listarPendientes, type Borrador } from "@/lib/offline";
 
 const ETIQUETAS_SUGERIDAS = ["asfalto", "ripio", "tierra", "montaña", "paso fronterizo", "lluvia", "frío", "camping", "con acompañante", "solo", "grupal"];
@@ -156,11 +157,14 @@ export function ViajeForm({
         lat: f.lat ?? null,
         lng: f.lng ?? null,
         favorita: f.favorita ?? false,
+        categoria: f.categoria ?? null,
       })) ?? []
   );
   const [subidas, setSubidas] = useState<Subida[]>([]);
   const [drag, setDrag] = useState(false);
   const inputFotos = useRef<HTMLInputElement>(null);
+  // Selector de archivos genérico: en Android la galería de fotos borra el GPS; el gestor de archivos a veces lo conserva
+  const inputArchivos = useRef<HTMLInputElement>(null);
 
   // Km / odómetro
   const [kmTxt, setKmTxt] = useState(viaje ? String(viaje.km) : "");
@@ -257,6 +261,7 @@ export function ViajeForm({
           lat: datos?.lat ?? null,
           lng: datos?.lng ?? null,
           favorita: false,
+          categoria: null,
         },
       ]);
       setSubidas((s) => s.filter((x) => x.key !== sub.key));
@@ -861,6 +866,21 @@ export function ViajeForm({
           />
         </div>
 
+        <p className="text-xs text-niebla">
+          ¿Las fotos no toman la ubicación? El celular la borra al elegirlas desde la galería.{" "}
+          <button type="button" onClick={() => inputArchivos.current?.click()} className="font-medium text-naranja underline-offset-2 hover:underline">
+            Elegilas desde Archivos
+          </button>{" "}
+          (Archivos → Imágenes o DCIM → Camera): así puede conservarla.
+          <input
+            ref={inputArchivos}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => { if (e.target.files) agregarFotos(e.target.files); e.target.value = ""; }}
+          />
+        </p>
+
         {(fotos.length > 0 || subidas.length > 0) && (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {fotos.map((f, i) => (
@@ -933,6 +953,21 @@ export function ViajeForm({
                   placeholder="Descripción…"
                   className="w-full border-t border-linea bg-transparent px-2.5 py-2 text-xs outline-none placeholder:text-niebla/60 focus:bg-carbon"
                 />
+                <select
+                  value={f.categoria ?? ""}
+                  onChange={(e) =>
+                    setFotos((x) => x.map((y, j) => (j === i ? { ...y, categoria: (e.target.value || null) as FotoDraft["categoria"] } : y)))
+                  }
+                  aria-label="Categoría"
+                  className={`w-full border-t border-linea bg-transparent px-2 py-1.5 text-xs outline-none focus:bg-carbon ${f.categoria ? "text-white" : "text-niebla/70"}`}
+                >
+                  <option value="">Sin categoría</option>
+                  {CATEGORIAS.map((c) => (
+                    <option key={c.valor} value={c.valor}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
               </li>
             ))}
 

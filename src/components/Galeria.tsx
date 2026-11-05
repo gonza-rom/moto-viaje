@@ -13,24 +13,29 @@ import {
   Heart,
   Images,
   MapPin,
+  Tag,
   Play,
   X,
 } from "lucide-react";
 import { cldMiniatura, cldOriginal, cldPoster, cldSrcSet, cldUrl, cldVideo, duracionTxt } from "@/lib/cld";
 import { agruparPorDia, fechaHoraFoto, linkMapa, type Grupo } from "@/lib/fotos";
 import { rangoFechas } from "@/lib/format";
-import { marcarFavorita } from "@/app/actions";
+import { cambiarCategoria, marcarFavorita } from "@/app/actions";
+import { ponerLugar } from "@/app/acciones-extra";
+import { CATEGORIAS, nombreCategoria, textoLugar, type Categoria } from "@/lib/categorias";
 import type { Foto, FotoConViaje } from "@/lib/types";
 
 type Item = Foto & { viajes?: FotoConViaje["viajes"] };
-type Filtro = "todo" | "fotos" | "videos" | "favs";
+type Filtro = "todo" | "fotos" | "videos" | "favs" | `cat:${Categoria}`;
+type Modo = "dia" | "viaje" | "nada" | "lugar" | "categoria";
 
 /** Evento para abrir una foto desde afuera (p. ej. un marcador del mapa) */
 export const EVENTO_ABRIR_FOTO = "mv:abrir-foto";
 
 export function Galeria({
-  fotos,
+  fotos: fotosOriginales,
   titulo,
+  sugerencias = [],
   agrupar = "dia",
   fechaInicio,
   diario,
@@ -45,25 +50,76 @@ export function Galeria({
   diario?: Record<string, string> | null;
   /** Link público: sin favoritas */
   soloLectura?: boolean;
+  /** Nombres de lugares para sugerir al poner el lugar a mano (p. ej. paradas de la ruta) */
+  sugerencias?: string[];
 }) {
   const [filtro, setFiltro] = useState<Filtro>("todo");
+  const [modo, setModo] = useState<Modo>(agrupar);
+  // Categorías cambiadas en esta sesión (se guardan al toque)
+  const [cats, setCats] = useState<Record<string, Categoria | null>>({});
   const [favs, setFavs] = useState<Record<string, boolean>>({});
   const [abierta, setAbierta] = useState<string | null>(null);
   const [touchX, setTouchX] = useState<number | null>(null);
+  // Lugares puestos a mano en esta sesión
+  const [lugares, setLugares] = useState<Record<string, Pick<Foto, "lugar" | "provincia" | "pais">>>({});
+  const fotos = useMemo(
+    () => fotosOriginales.map((f) => (lugares[f.id] ? { ...f, ...lugares[f.id] } : f)),
+    [fotosOriginales, lugares]
+  );
 
   const esFav = useCallback((f: Item) => favs[f.id] ?? f.favorita ?? false, [favs]);
+  const catDe = useCallback((f: Item): Categoria | null => (f.id in cats ? cats[f.id] : (f.categoria ?? null)), [cats]);
 
   const cuentas = useMemo(() => {
     const videos = fotos.filter((f) => f.tipo === "video").length;
-    return { todo: fotos.length, fotos: fotos.length - videos, videos, favs: fotos.filter(esFav).length };
-  }, [fotos, esFav]);
+    const porCat = new Map<Categoria, number>();
+    for (const f of fotos) {
+      const c = catDe(f);
+      if (c) porCat.set(c, (porCat.get(c) ?? 0) + 1);
+    }
+    return {
+      todo: fotos.length,
+      fotos: fotos.length - videos,
+      videos,
+      favs: fotos.filter(esFav).length,
+      porCat,
+      conLugar: fotos.some((f) => f.lugar),
+    };
+  }, [fotos, esFav, catDe]);
 
   const grupos: Grupo<Item>[] = useMemo(() => {
     const visibles = fotos.filter((f) =>
-      filtro === "fotos" ? f.tipo !== "video" : filtro === "videos" ? f.tipo === "video" : filtro === "favs" ? esFav(f) : true
+      filtro === "fotos"
+        ? f.tipo !== "video"
+        : filtro === "videos"
+          ? f.tipo === "video"
+          : filtro === "favs"
+            ? esFav(f)
+            : filtro.startsWith("cat:")
+              ? catDe(f) === filtro.slice(4)
+              : true
     );
-    if (agrupar === "dia" && fechaInicio) return agruparPorDia(visibles, fechaInicio);
-    if (agrupar === "viaje") {
+    // Agrupar por lugar o categoría: los grupos con más fotos primero, "sin…" al final
+    if (modo === "lugar" || modo === "categoria") {
+      const mapa = new Map<string, Grupo<Item>>();
+      for (const f of visibles) {
+        const c = modo === "lugar" ? textoLugar(f) || "" : (catDe(f) ?? "");
+        if (!mapa.has(c)) {
+          mapa.set(c, {
+            clave: c || "sin",
+            titulo: c ? (modo === "lugar" ? (f.lugar || c) : nombreCategoria(c)) : modo === "lugar" ? "Sin ubicación" : "Sin categoría",
+            subtitulo: modo === "lugar" && c && f.provincia && f.provincia !== f.lugar ? f.provincia : undefined,
+            items: [],
+          });
+        }
+        mapa.get(c)!.items.push(f);
+      }
+      return [...mapa.entries()]
+        .sort(([a, ga], [b, gb]) => (a ? 0 : 1) - (b ? 0 : 1) || gb.items.length - ga.items.length)
+        .map(([, g]) => g);
+    }
+    if (modo === "dia" && fechaInicio) return agruparPorDia(visibles, fechaInicio);
+    if (modo === "viaje") {
       const mapa = new Map<string, Grupo<Item>>();
       for (const f of visibles) {
         const v = f.viajes;
@@ -80,7 +136,7 @@ export function Galeria({
       return [...mapa.values()];
     }
     return [{ clave: "todo", titulo: "", items: visibles }];
-  }, [fotos, filtro, agrupar, fechaInicio, esFav]);
+  }, [fotos, filtro, modo, fechaInicio, esFav, catDe]);
 
   // Orden de navegación del visor = orden en pantalla
   const lista = useMemo(() => grupos.flatMap((g) => g.items), [grupos]);
@@ -106,6 +162,17 @@ export function Galeria({
     }
   }
 
+  async function elegirCategoria(f: Item, c: Categoria | null) {
+    const antes = catDe(f);
+    const nueva = antes === c ? null : c; // tocar la misma la quita
+    setCats((x) => ({ ...x, [f.id]: nueva }));
+    const r = await cambiarCategoria(f.id, nueva).catch(() => ({ error: "Sin conexión" }));
+    if (r?.error) {
+      setCats((x) => ({ ...x, [f.id]: antes }));
+      alert(r.error);
+    }
+  }
+
   // Abrir desde el mapa
   useEffect(() => {
     const h = (e: Event) => {
@@ -122,6 +189,8 @@ export function Galeria({
   useEffect(() => {
     if (!actual) return;
     const onKey = (e: KeyboardEvent) => {
+      // escribiendo el lugar: las flechas mueven el cursor, no cambian de foto
+      if (e.target instanceof HTMLInputElement && e.key !== "Escape") return;
       if (e.key === "Escape") cerrar();
       if (e.key === "ArrowRight") mover(1);
       if (e.key === "ArrowLeft") mover(-1);
@@ -141,12 +210,45 @@ export function Galeria({
     { k: "fotos", label: "Fotos", icono: Camera, n: cuentas.fotos },
     { k: "videos", label: "Videos", icono: Film, n: cuentas.videos },
     { k: "favs", label: "Favoritas", icono: Heart, n: cuentas.favs },
+    ...CATEGORIAS.filter((c) => cuentas.porCat.has(c.valor)).map((c) => ({
+      k: `cat:${c.valor}` as Filtro,
+      label: c.label,
+      icono: Tag,
+      n: cuentas.porCat.get(c.valor)!,
+    })),
   ];
   // Mostrar filtros solo si sirven para algo
-  const conFiltros = (cuentas.videos > 0 && cuentas.fotos > 0) || cuentas.favs > 0;
+  const conFiltros = (cuentas.videos > 0 && cuentas.fotos > 0) || cuentas.favs > 0 || cuentas.porCat.size > 0;
+
+  // Formas de agrupar disponibles
+  const modos: { k: Modo; label: string }[] = [
+    ...(agrupar === "viaje" ? [{ k: "viaje" as Modo, label: "Por viaje" }] : []),
+    ...(agrupar === "dia" ? [{ k: "dia" as Modo, label: "Por día" }] : []),
+    ...(agrupar === "nada" ? [{ k: "nada" as Modo, label: "Todas" }] : []),
+    ...(cuentas.conLugar ? [{ k: "lugar" as Modo, label: "Por lugar" }] : []),
+    ...(cuentas.porCat.size ? [{ k: "categoria" as Modo, label: "Por categoría" }] : []),
+  ];
 
   return (
     <div className="space-y-5">
+      {modos.length > 1 && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-niebla">Agrupar:</span>
+          <div className="inline-flex overflow-hidden rounded-full border border-linea">
+            {modos.map((m) => (
+              <button
+                key={m.k}
+                type="button"
+                onClick={() => setModo(m.k)}
+                className={`px-3 py-1.5 font-semibold transition ${modo === m.k ? "bg-white/10 text-white" : "text-niebla hover:text-white"}`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {conFiltros && (
         <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
           {chips
@@ -172,7 +274,7 @@ export function Galeria({
         <section key={g.clave} className="space-y-3">
           {g.titulo && (
             <div className="flex items-baseline gap-2 border-b border-linea pb-1.5">
-              {agrupar === "viaje" ? (
+              {modo === "viaje" ? (
                 <Link href={`/viajes/${g.clave}`} className="group flex items-center gap-1.5 font-semibold hover:text-naranja">
                   {g.titulo} <ArrowRight className="size-4 opacity-0 transition group-hover:opacity-100" />
                 </Link>
@@ -183,7 +285,7 @@ export function Galeria({
               <span className="ml-auto text-xs text-niebla">{g.items.length}</span>
             </div>
           )}
-          {diario?.[g.clave] && (
+          {modo === "dia" && diario?.[g.clave] && (
             <p className="border-l-2 border-naranja/60 pl-3 text-sm leading-relaxed whitespace-pre-line text-white/85">{diario[g.clave]}</p>
           )}
           <div className="columns-2 gap-2 sm:columns-3 lg:columns-4">
@@ -333,13 +435,149 @@ export function Galeria({
                   rel="noopener noreferrer"
                   className="flex items-center gap-1 hover:text-white"
                 >
-                  <MapPin className="size-3.5" /> Ver dónde fue
+                  <MapPin className="size-3.5" />{" "}
+                  {/* con el editor de lugar abajo, acá solo el link al mapa */}
+                  {soloLectura ? textoLugar(actual) || "Ver dónde fue" : "Ver en el mapa"}
                 </a>
               )}
+              {soloLectura && actual.lat == null && actual.lugar && (
+                <span className="flex items-center gap-1">
+                  <MapPin className="size-3.5" /> {textoLugar(actual)}
+                </span>
+              )}
+              {soloLectura && catDe(actual) && (
+                <span className="flex items-center gap-1">
+                  <Tag className="size-3.5" /> {nombreCategoria(catDe(actual))}
+                </span>
+              )}
             </div>
+            {!soloLectura && (
+              <div
+                className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pt-1 sm:justify-center"
+                aria-label="Categoría"
+                // deslizar la fila de categorías no cambia de foto
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => e.stopPropagation()}
+              >
+                {CATEGORIAS.map((c) => (
+                  <button
+                    key={c.valor}
+                    type="button"
+                    onClick={() => elegirCategoria(actual, c.valor)}
+                    className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+                      catDe(actual) === c.valor
+                        ? "border-naranja bg-naranja text-black"
+                        : "border-white/15 text-white/60 hover:text-white"
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!soloLectura && (
+              <EditorLugar
+                key={actual.id}
+                foto={actual}
+                fotos={fotos}
+                sugerencias={sugerencias}
+                onGuardado={(ids, l) => setLugares((x) => ({ ...x, ...Object.fromEntries(ids.map((id) => [id, l])) }))}
+              />
+            )}
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+/** Fotos del mismo viaje sacadas hasta 1 h antes o después, que todavía no tienen lugar */
+function cercanasSinLugar(foto: Item, fotos: Item[]) {
+  if (!foto.tomada_en) return [];
+  const t = Date.parse(foto.tomada_en);
+  return fotos.filter(
+    (f) =>
+      f.id !== foto.id &&
+      f.viaje_id === foto.viaje_id &&
+      !f.lugar &&
+      f.tomada_en &&
+      Math.abs(Date.parse(f.tomada_en) - t) <= 60 * 60 * 1000
+  );
+}
+
+function EditorLugar({
+  foto,
+  fotos,
+  sugerencias,
+  onGuardado,
+}: {
+  foto: Item;
+  fotos: Item[];
+  sugerencias: string[];
+  onGuardado: (ids: string[], l: Pick<Foto, "lugar" | "provincia" | "pais">) => void;
+}) {
+  const actual = textoLugar(foto);
+  const [texto, setTexto] = useState(actual);
+  const [conCercanas, setConCercanas] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [msj, setMsj] = useState("");
+  const cercanas = useMemo(() => cercanasSinLugar(foto, fotos), [foto, fotos]);
+  const opciones = useMemo(
+    () => [...new Set([...fotos.map((f) => textoLugar(f)).filter(Boolean), ...sugerencias])].sort((a, b) => a.localeCompare(b, "es")),
+    [fotos, sugerencias]
+  );
+  const cambiado = texto.trim() !== actual;
+
+  async function guardar(e: React.FormEvent) {
+    e.preventDefault();
+    if (!cambiado || guardando) return;
+    const ids = [foto.id, ...(conCercanas && texto.trim() ? cercanas.map((f) => f.id) : [])];
+    setGuardando(true);
+    setMsj("");
+    const r = await ponerLugar(ids, texto).catch(() => ({ lugar: null, provincia: null, pais: null, error: "Sin conexión" }));
+    setGuardando(false);
+    if (r.error) return setMsj(r.error);
+    onGuardado(ids, { lugar: r.lugar, provincia: r.provincia, pais: r.pais });
+    setTexto(textoLugar(r));
+    setMsj(ids.length > 1 ? `Guardado en ${ids.length} fotos` : "Guardado");
+  }
+
+  return (
+    <form
+      onSubmit={guardar}
+      className="mx-auto flex max-w-md flex-wrap items-center justify-center gap-x-2 gap-y-1 pt-1.5"
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
+    >
+      <label className="flex min-w-0 flex-1 items-center gap-1.5 rounded-full border border-white/15 px-3 py-1 focus-within:border-naranja">
+        <MapPin className="size-3.5 shrink-0 text-niebla" />
+        <input
+          value={texto}
+          onChange={(e) => (setTexto(e.target.value), setMsj(""))}
+          list="mv-lugares"
+          maxLength={120}
+          placeholder={foto.lat != null ? "Detectando lugar…" : "¿Dónde la sacaste? Ej: Tafí del Valle"}
+          aria-label="Lugar"
+          className="w-full min-w-0 bg-transparent text-xs text-white outline-none placeholder:text-white/40"
+        />
+        <datalist id="mv-lugares">
+          {opciones.map((o) => (
+            <option key={o} value={o} />
+          ))}
+        </datalist>
+      </label>
+      {cambiado && (
+        <button disabled={guardando} className="rounded-full bg-naranja px-3 py-1 text-xs font-semibold text-black disabled:opacity-50">
+          {guardando ? "Guardando…" : "Guardar"}
+        </button>
+      )}
+      {cambiado && texto.trim() && cercanas.length > 0 && (
+        <label className="flex w-full items-center justify-center gap-1.5 text-[11px] text-niebla">
+          <input type="checkbox" checked={conCercanas} onChange={(e) => setConCercanas(e.target.checked)} className="accent-[var(--color-naranja)]" />
+          También a {cercanas.length} {cercanas.length === 1 ? "foto sacada" : "fotos sacadas"} cerca de esa hora (±1 h)
+        </label>
+      )}
+      {msj && <p className="w-full text-[11px] text-niebla">{msj}</p>}
+    </form>
   );
 }

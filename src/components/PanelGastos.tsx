@@ -186,7 +186,7 @@ export function PanelGastos({
               <input name="fecha" type="date" defaultValue={fechaDefault ?? new Date().toISOString().slice(0, 10)} className="input" />
             </div>
             {(soloNafta || tipo === "nafta") && <Campo label="Odómetro" name="odometro" placeholder="12850" />}
-            <Campo label="Lugar" name="lugar" placeholder="YPF Belén" />
+            <Campo label="Lugar" name="lugar" placeholder="YPF Belén" texto />
             {motos && motos.length > 0 && !motoId && (
               <div>
                 <label className="label">Moto</label>
@@ -226,11 +226,30 @@ export function PanelGastos({
   );
 }
 
-function Campo({ label, name, placeholder, decimal }: { label: string; name: string; placeholder?: string; decimal?: boolean }) {
+function Campo({
+  label,
+  name,
+  placeholder,
+  decimal,
+  texto,
+}: {
+  label: string;
+  name: string;
+  placeholder?: string;
+  decimal?: boolean;
+  /** Texto libre (teclado normal); si no, teclado numérico */
+  texto?: boolean;
+}) {
   return (
     <div>
       <label className="label">{label}</label>
-      <input name={name} inputMode={decimal ? "decimal" : "numeric"} placeholder={placeholder} className="input" />
+      <input
+        name={name}
+        inputMode={texto ? "text" : decimal ? "decimal" : "numeric"}
+        maxLength={texto ? 120 : undefined}
+        placeholder={placeholder}
+        className="input"
+      />
     </div>
   );
 }

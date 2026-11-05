@@ -33,6 +33,7 @@ import { cldMiniatura, cldSrcSet } from "@/lib/cld";
 import { dias, km, num, rangoFechas } from "@/lib/format";
 import { linkGoogleMaps } from "@/lib/ruta";
 import { Galeria } from "@/components/Galeria";
+import { DetectarLugares } from "@/components/DetectarLugares";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { MapaRutaLazy } from "@/components/mapas";
 import { eliminarViaje } from "@/app/actions";
@@ -192,12 +193,14 @@ export default async function ViajePage({ params }: Props) {
             <Images className="size-6 text-naranja" />
             {hayVideos ? "Fotos y videos" : "Fotos"} <span className="text-niebla">· {v.fotos.length}</span>
           </h2>
+          <DetectarLugares pendientes={v.fotos.filter((f) => f.lat != null && f.lng != null && f.lugar == null).length} />
           <Galeria
             fotos={v.fotos}
             titulo={v.titulo}
             agrupar="dia"
             fechaInicio={v.fecha_inicio}
             diario={porDias ? v.diario : null}
+            sugerencias={[v.origen, v.destino, ...(v.ruta?.paradas ?? []).map((p) => p.nombre)].filter((x): x is string => !!x)}
           />
         </section>
       )}

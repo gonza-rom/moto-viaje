@@ -1,5 +1,6 @@
 import type { TipoMedio } from "./cld";
 import type { Ruta } from "./ruta";
+import type { Categoria } from "./categorias";
 
 export type Moto = {
   id: string;
@@ -25,6 +26,11 @@ export type Foto = {
   lat: number | null;
   lng: number | null;
   favorita: boolean;
+  categoria: Categoria | null;
+  /** Lugar detectado por el GPS (null = falta detectar, "" = sin resultado) */
+  lugar: string | null;
+  provincia: string | null;
+  pais: string | null;
 };
 
 /** Foto con datos de su viaje (galería general) */
@@ -114,4 +120,5 @@ export type FotoDraft = {
   lat: number | null;
   lng: number | null;
   favorita: boolean;
+  categoria: Categoria | null;
 };

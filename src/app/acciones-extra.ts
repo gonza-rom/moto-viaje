@@ -161,3 +161,142 @@ export async function guardarAltimetria(id: string, a: Altimetria) {
     .eq("id", id);
   revalidatePath("/estadisticas");
 }
+
+/* ───────────── Lugares de las fotos ───────────── */
+
+type Direccion = Record<string, string>;
+const lugarDeDireccion = (a: Direccion = {}) => ({
+  lugar: a.city || a.town || a.village || a.hamlet || a.municipality || a.county || a.state_district || "",
+  provincia: a.state || a.province || a.region || null,
+  pais: a.country || null,
+});
+
+/**
+ * Detecta la localidad / provincia / país de las fotos con GPS que todavía no lo tienen.
+ * Procesa pocas por llamada (Nominatim pide máx. 1 pedido por segundo y la función tiene
+ * tiempo limitado): el cliente la llama en bucle mientras queden pendientes.
+ * Reusa el lugar de fotos cercanas (~1 km) para no repetir pedidos.
+ */
+export async function detectarLugares(): Promise<{ hechas: number; pendientes: number; error?: string }> {
+  await requerirSesion();
+  const LOTE = 6;
+  const { data: fotos, error } = await db()
+    .from("fotos")
+    .select("id, lat, lng")
+    .not("lat", "is", null)
+    .not("lng", "is", null)
+    .is("lugar", null)
+    .order("tomada_en", { ascending: true, nullsFirst: false })
+    .limit(LOTE);
+  if (error) return { hechas: 0, pendientes: 0, error: error.message };
+
+  const cache = new Map<string, ReturnType<typeof lugarDeDireccion>>();
+  const clave = (lat: number, lng: number) => `${lat.toFixed(2)},${lng.toFixed(2)}`;
+  let hechas = 0;
+  let pedidos = 0;
+  let errorRed: string | undefined;
+
+  for (const f of (fotos ?? []) as { id: string; lat: number; lng: number }[]) {
+    const k = clave(f.lat, f.lng);
+    let res = cache.get(k);
+
+    if (!res) {
+      // ¿Otra foto ya detectada a menos de ~1 km?
+      const d = 0.01;
+      const { data: cerca } = await db()
+        .from("fotos")
+        .select("lugar, provincia, pais")
+        .gte("lat", f.lat - d)
+        .lte("lat", f.lat + d)
+        .gte("lng", f.lng - d)
+        .lte("lng", f.lng + d)
+        .not("lugar", "is", null)
+        .neq("lugar", "")
+        .limit(1);
+      if (cerca?.[0]) res = { lugar: cerca[0].lugar, provincia: cerca[0].provincia, pais: cerca[0].pais };
+    }
+
+    if (!res) {
+      if (pedidos > 0) await new Promise((ok) => setTimeout(ok, 1100));
+      pedidos++;
+      try {
+        const r = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=12&addressdetails=1&accept-language=es&lat=${f.lat}&lon=${f.lng}`,
+          { headers: { "User-Agent": "moto-viajes/1.0 (diario personal de viajes)" }, signal: AbortSignal.timeout(8000) }
+        );
+        if (!r.ok) throw new Error(`OpenStreetMap respondió ${r.status}`);
+        const j = (await r.json()) as { address?: Direccion };
+        res = lugarDeDireccion(j.address);
+      } catch (e) {
+        errorRed = (e as Error).message || "Sin conexión con OpenStreetMap";
+        break;
+      }
+    }
+
+    cache.set(k, res);
+    const { error: eu } = await db().from("fotos").update(res).eq("id", f.id);
+    if (!eu) hechas++;
+  }
+
+  const { count } = await db()
+    .from("fotos")
+    .select("id", { count: "exact", head: true })
+    .not("lat", "is", null)
+    .not("lng", "is", null)
+    .is("lugar", null);
+  if (hechas) revalidatePath("/estadisticas");
+  return { hechas, pendientes: count ?? 0, ...(errorRed && !hechas ? { error: errorRed } : {}) };
+}
+
+/**
+ * Lugar puesto a mano (para fotos sin GPS: el celular lo borra al subir desde la galería).
+ * "Tafí del Valle" o "Tafí del Valle, Tucumán". Completa provincia y país reusando fotos con el
+ * mismo lugar o buscándolo en OpenStreetMap. Texto vacío = quitar el lugar.
+ */
+export async function ponerLugar(
+  ids: string[],
+  texto: string
+): Promise<{ lugar: string | null; provincia: string | null; pais: string | null; error?: string }> {
+  await requerirSesion();
+  const validos = (Array.isArray(ids) ? ids : []).filter((x) => typeof x === "string" && UUID.test(x)).slice(0, 500);
+  const vacio = { lugar: null, provincia: null, pais: null };
+  if (!validos.length) return { ...vacio, error: "No hay fotos" };
+
+  const limpio = String(texto ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+  if (!limpio) {
+    const { error } = await db().from("fotos").update(vacio).in("id", validos);
+    return error ? { ...vacio, error: error.message } : vacio;
+  }
+
+  const [lugar, ...resto] = limpio.split(",").map((s) => s.trim()).filter(Boolean);
+  let provincia: string | null = resto[0] ?? null;
+  let pais: string | null = resto[1] ?? null;
+
+  // ¿Ya hay fotos en ese lugar con provincia? (sin pedidos externos)
+  if (!provincia) {
+    const { data } = await db().from("fotos").select("provincia, pais").ilike("lugar", lugar).not("provincia", "is", null).limit(1);
+    if (data?.[0]) ({ provincia, pais } = data[0]);
+  }
+  if (!provincia || !pais) {
+    try {
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1&accept-language=es&q=${encodeURIComponent(limpio)}`,
+        { headers: { "User-Agent": "moto-viajes/1.0 (diario personal de viajes)" }, signal: AbortSignal.timeout(6000) }
+      );
+      if (r.ok) {
+        const [res] = (await r.json()) as { address?: Direccion }[];
+        const l = lugarDeDireccion(res?.address);
+        provincia ??= l.provincia;
+        pais ??= l.pais;
+      }
+    } catch {
+      // sin conexión con OpenStreetMap: se guarda solo el nombre
+    }
+  }
+
+  const fila = { lugar, provincia, pais };
+  const { error } = await db().from("fotos").update(fila).in("id", validos);
+  if (error) return { ...vacio, error: error.message };
+  revalidatePath("/estadisticas");
+  return fila;
+}

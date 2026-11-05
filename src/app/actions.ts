@@ -10,6 +10,7 @@ import { requerirSesion } from "@/lib/sesion";
 import { limpiarFallos, minutosBloqueo, registrarFallo } from "@/lib/limite";
 import type { FotoDraft } from "@/lib/types";
 import { parseRuta } from "@/lib/ruta";
+import { esCategoria } from "@/lib/categorias";
 
 /** ir: adónde navegar después de guardar (lo hace el formulario; ver ViajeForm) */
 export type Estado = { error?: string; ok?: string; ir?: string } | undefined;
@@ -178,6 +179,7 @@ function fotosDelForm(fd: FormData): FotoDraft[] {
           lat: conGps ? lat : null,
           lng: conGps ? lng : null,
           favorita: f.favorita === true,
+          categoria: esCategoria(f.categoria) ? f.categoria : null,
         };
       });
   } catch {
@@ -199,6 +201,8 @@ const filaFoto = (viaje_id: string) => (f: FotoDraft, i: number) => ({
   lat: f.lat,
   lng: f.lng,
   favorita: f.favorita,
+  categoria: f.categoria,
+  // lugar/provincia/pais no van: los completa detectarLugares() y así no se pisan al editar
 });
 
 function refrescar(id?: string) {
@@ -317,6 +321,14 @@ export async function marcarFavorita(id: string, favorita: boolean): Promise<Est
   if (error) return { error: mensaje(error, "marcar la favorita") };
   void data; // sin revalidar la página actual (ver nota en acciones-extra.ts)
   return { ok: favorita ? "Agregada a favoritas" : "Quitada de favoritas" };
+}
+
+export async function cambiarCategoria(id: string, categoria: string | null): Promise<Estado> {
+  await requerirSesion();
+  if (categoria !== null && !esCategoria(categoria)) return { error: "Categoría inválida" };
+  const { error } = await db().from("fotos").update({ categoria }).eq("id", id);
+  if (error) return { error: mensaje(error, "cambiar la categoría") };
+  return { ok: "Categoría guardada" };
 }
 
 /* ───────────── Motos ───────────── */
