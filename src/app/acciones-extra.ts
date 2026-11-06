@@ -311,9 +311,10 @@ export async function guardarLugaresRecorrido(id: string, lugares: LugarRecorrid
   const t = (s: unknown) => (typeof s === "string" && s.trim() ? s.trim().slice(0, 120) : undefined);
   const n = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : null);
   const limpios = lugares
-    .map((l) => ({ nombre: t(l?.nombre), provincia: t(l?.provincia), pais: t(l?.pais), km: n(l?.km), lat: n(l?.lat), lng: n(l?.lng) }))
+    .map((l) => ({ nombre: t(l?.nombre), provincia: t(l?.provincia), pais: t(l?.pais), km: n(l?.km), lat: n(l?.lat), lng: n(l?.lng), propio: l?.propio === true || undefined }))
     .filter((l) => l.nombre && l.km !== null && l.lat !== null && l.lng !== null && Math.abs(l.lat!) <= 90 && Math.abs(l.lng!) <= 180)
-    .map((l) => ({ ...l, km: Math.round(l.km! * 10) / 10 }));
+    .map((l) => ({ ...l, km: Math.round(l.km! * 10) / 10 }))
+    .sort((a, b) => a.km - b.km);
   const { error } = await db().from("viajes").update({ lugares: limpios }).eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/estadisticas");

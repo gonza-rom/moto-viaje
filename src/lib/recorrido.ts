@@ -61,3 +61,18 @@ export function datosVideo(v: {
     ...(provincias ? [{ valor: String(provincias), label: provincias === 1 ? "provincia" : "provincias" }] : []),
   ];
 }
+
+/** Punto del recorrido a una distancia km (interpolado entre los dos puntos vecinos) */
+export function puntoEnKm(puntos: Punto[], acum: number[], km: number): Punto {
+  let lo = 0;
+  let hi = acum.length - 1;
+  while (lo < hi) {
+    const m = (lo + hi) >> 1;
+    if (acum[m] < km) lo = m + 1;
+    else hi = m;
+  }
+  const i = Math.max(1, lo);
+  const [a, b] = [puntos[i - 1], puntos[i]];
+  const t = Math.min(1, Math.max(0, (km - acum[i - 1]) / (acum[i] - acum[i - 1] || 1)));
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}

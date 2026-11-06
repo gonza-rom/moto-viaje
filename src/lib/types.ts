@@ -70,7 +70,16 @@ export type Viaje = {
   created_at: string;
 };
 
-export type LugarRecorrido = { nombre: string; provincia?: string; pais?: string; km: number; lat: number; lng: number };
+export type LugarRecorrido = {
+  nombre: string;
+  provincia?: string;
+  pais?: string;
+  km: number;
+  lat: number;
+  lng: number;
+  /** Agregado a mano (p. ej. "Cuesta del Clavillo"): se conserva al volver a buscar las localidades */
+  propio?: boolean;
+};
 
 /** Perfil de altura del recorrido (calculado una vez y guardado) */
 export type Altimetria = {
