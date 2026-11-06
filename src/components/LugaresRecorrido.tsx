@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { LoaderCircle, MapPinned, RefreshCw } from "lucide-react";
+import { Camera, Check, LoaderCircle, MapPin, MapPinned, RefreshCw, X } from "lucide-react";
 import { parseGpx, type Punto } from "@/lib/gpx";
 import { nombrarLugar, type Ruta } from "@/lib/ruta";
 import { muestrear } from "@/lib/recorrido";
-import { guardarLugaresRecorrido } from "@/app/acciones-extra";
-import type { LugarRecorrido } from "@/lib/types";
+import { guardarLugaresRecorrido, ponerLugar } from "@/app/acciones-extra";
+import { cldMiniatura } from "@/lib/cld";
+import { fechaHoraFoto } from "@/lib/fotos";
+import type { Foto, LugarRecorrido } from "@/lib/types";
 
 const CADA_KM = 20;
 
@@ -20,7 +22,10 @@ export function LugaresRecorrido({
   gpxUrl,
   ruta,
   editable = false,
+  fotos = [],
 }: {
+  /** Fotos del viaje: tocando una localidad se eligen las que se sacaron ahí */
+  fotos?: Foto[];
   viajeId: string;
   lugares: LugarRecorrido[] | null;
   gpxUrl: string | null;
@@ -31,6 +36,8 @@ export function LugaresRecorrido({
   const [progreso, setProgreso] = useState<{ hechos: number; total: number } | null>(null);
   const [error, setError] = useState("");
   const corriendo = useRef(false);
+  const [asignando, setAsignando] = useState<LugarRecorrido | null>(null);
+  const porLugar = (n: string) => fotos.filter((f) => f.lugar?.toLowerCase() === n.toLowerCase()).length;
   const hayRecorrido = !!gpxUrl || (ruta?.trazo?.length ?? 0) > 1;
 
   async function buscar() {
@@ -131,9 +138,28 @@ export function LugaresRecorrido({
                 {t.lugares.map((l, j) => (
                   <span key={j} className="flex items-center gap-1.5">
                     {(i > 0 || j > 0) && <span className="text-niebla/60">→</span>}
-                    <span className="rounded-full border border-linea px-2.5 py-0.5" title={`km ${Math.round(l.km)}`}>
-                      {l.nombre}
-                    </span>
+                    {editable && fotos.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setAsignando(l)}
+                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 transition hover:border-naranja ${
+                          porLugar(l.nombre) ? "border-naranja/60 text-white" : "border-linea"
+                        }`}
+                        title={`km ${Math.round(l.km)} · tocá para elegir las fotos que sacaste acá`}
+                      >
+                        {l.nombre}
+                        {porLugar(l.nombre) > 0 && (
+                          <span className="flex items-center gap-0.5 text-[11px] text-naranja">
+                            <Camera className="size-3" />
+                            {porLugar(l.nombre)}
+                          </span>
+                        )}
+                      </button>
+                    ) : (
+                      <span className="rounded-full border border-linea px-2.5 py-0.5" title={`km ${Math.round(l.km)}`}>
+                        {l.nombre}
+                      </span>
+                    )}
                   </span>
                 ))}
               </p>
@@ -141,6 +167,144 @@ export function LugaresRecorrido({
           ))}
         </ol>
       )}
+      {editable && fotos.length > 0 && tramos.length > 0 && (
+        <p className="text-xs text-niebla">Tocá una localidad para elegir las fotos que sacaste ahí.</p>
+      )}
+
+      {asignando && (
+        <AsignarFotos
+          lugar={asignando}
+          fotos={fotos}
+          onCerrar={() => setAsignando(null)}
+          // las fotos se muestran en varias partes de la página: recargar para que todo quede igual
+          onGuardado={() => window.location.reload()}
+        />
+      )}
     </section>
+  );
+}
+
+/** Elegir las fotos sacadas en una localidad del recorrido */
+function AsignarFotos({
+  lugar,
+  fotos,
+  onCerrar,
+  onGuardado,
+}: {
+  lugar: LugarRecorrido;
+  fotos: Foto[];
+  onCerrar: () => void;
+  onGuardado: () => void;
+}) {
+  const esDeAca = (f: Foto) => f.lugar?.toLowerCase() === lugar.nombre.toLowerCase();
+  const [sel, setSel] = useState(() => new Set(fotos.filter(esDeAca).map((f) => f.id)));
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState("");
+  const alternar = (id: string) =>
+    setSel((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  // Por día, para encontrarlas más fácil
+  const dias = new Map<string, Foto[]>();
+  for (const f of fotos) {
+    const d = f.tomada_en?.slice(0, 10) ?? "sin-fecha";
+    dias.set(d, [...(dias.get(d) ?? []), f]);
+  }
+
+  async function guardar() {
+    setGuardando(true);
+    setError("");
+    const poner = [...sel];
+    const quitar = fotos.filter((f) => esDeAca(f) && !sel.has(f.id)).map((f) => f.id);
+    const texto = [lugar.nombre, lugar.provincia, lugar.pais].filter(Boolean).join(", ");
+    const intentar = async (ids: string[], t: string): Promise<string | undefined> => {
+      if (!ids.length) return undefined;
+      const r = await ponerLugar(ids, t).catch(() => ({ error: "Sin conexión" }));
+      return r.error;
+    };
+    const err = (await intentar(poner, texto)) ?? (await intentar(quitar, ""));
+    setGuardando(false);
+    if (err) return setError(err);
+    onGuardado();
+  }
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-end justify-center bg-black/80 sm:items-center" onClick={onCerrar}>
+      <div className="card flex max-h-[90dvh] w-full max-w-2xl flex-col gap-3 rounded-b-none p-4 sm:rounded-b-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start gap-2">
+          <div>
+            <h2 className="font-display text-2xl font-bold uppercase">¿Qué fotos sacaste en {lugar.nombre}?</h2>
+            <p className="text-xs text-niebla">
+              {lugar.provincia ? `${lugar.provincia} · ` : ""}km {Math.round(lugar.km)} · {sel.size} elegidas
+            </p>
+          </div>
+          <button type="button" onClick={onCerrar} className="btn-ghost ml-auto px-2.5 py-1.5" aria-label="Cerrar">
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="min-h-0 space-y-3 overflow-y-auto">
+          {[...dias.entries()].map(([d, lista]) => (
+            <div key={d} className="space-y-1.5">
+              <p className="flex items-center gap-2 text-xs font-semibold text-niebla">
+                {d === "sin-fecha" ? "Sin fecha" : fechaHoraFoto(`${d}T`, false)}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSel((s) => {
+                      const n = new Set(s);
+                      const todas = lista.every((f) => n.has(f.id));
+                      for (const f of lista) (todas ? n.delete(f.id) : n.add(f.id));
+                      return n;
+                    })
+                  }
+                  className="font-normal text-naranja"
+                >
+                  {lista.every((f) => sel.has(f.id)) ? "quitar todas" : "elegir todas"}
+                </button>
+              </p>
+              <ul className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
+                {lista.map((f) => {
+                  const si = sel.has(f.id);
+                  const otro = f.lugar && !esDeAca(f) ? f.lugar : null;
+                  return (
+                    <li key={f.id}>
+                      <button
+                        type="button"
+                        onClick={() => alternar(f.id)}
+                        aria-pressed={si}
+                        className={`relative block aspect-square w-full overflow-hidden rounded-lg ${si ? "ring-3 ring-naranja" : ""}`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={cldMiniatura(f, { w: 300, h: 300, crop: "fill" })} alt="" className={`size-full object-cover ${si ? "" : "opacity-70"}`} loading="lazy" />
+                        <span
+                          className={`absolute top-1.5 right-1.5 grid size-6 place-items-center rounded-full border-2 ${
+                            si ? "border-naranja bg-naranja text-black" : "border-white/80 bg-black/40"
+                          }`}
+                        >
+                          {si && <Check className="size-4" strokeWidth={3} />}
+                        </span>
+                        <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/80 to-transparent px-1.5 pt-4 pb-1 text-left text-[10px] text-white">
+                          {f.tomada_en ? f.tomada_en.slice(11, 16) : ""}
+                          {otro && !si ? ` · 📍 ${otro}` : ""}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+        {error && <p className="text-sm text-red-400">{error}</p>}
+        <button type="button" onClick={guardar} disabled={guardando} className="btn-primary disabled:opacity-50">
+          {guardando ? <LoaderCircle className="size-4 animate-spin" /> : <MapPin className="size-4" />}
+          {guardando ? "Guardando…" : `Guardar: ${sel.size} ${sel.size === 1 ? "foto" : "fotos"} en ${lugar.nombre}`}
+        </button>
+      </div>
+    </div>
   );
 }

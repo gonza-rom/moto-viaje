@@ -42,3 +42,22 @@ export function reducir(puntos: Punto[], n: number): Punto[] {
   const paso = (puntos.length - 1) / (n - 1);
   return Array.from({ length: n }, (_, i) => puntos[Math.round(i * paso)]);
 }
+
+/** Datos del cierre del video del viaje */
+export function datosVideo(v: {
+  km: number;
+  fecha_inicio: string;
+  fecha_fin: string | null;
+  altimetria: { max: number } | null;
+  lugares?: { provincia?: string }[] | null;
+}) {
+  const dias = v.fecha_fin ? Math.max(1, Math.round((Date.parse(v.fecha_fin) - Date.parse(v.fecha_inicio)) / 86400000) + 1) : 1;
+  const provincias = new Set((v.lugares ?? []).map((l) => l.provincia).filter(Boolean)).size;
+  const nf = new Intl.NumberFormat("es-AR");
+  return [
+    { valor: `${nf.format(Math.round(Number(v.km)))} km`, label: "recorridos" },
+    { valor: String(dias), label: dias === 1 ? "día" : "días" },
+    ...(v.altimetria ? [{ valor: `${nf.format(v.altimetria.max)} m`, label: "altura máxima" }] : []),
+    ...(provincias ? [{ valor: String(provincias), label: provincias === 1 ? "provincia" : "provincias" }] : []),
+  ];
+}

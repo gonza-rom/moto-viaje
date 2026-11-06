@@ -176,7 +176,7 @@ export default async function ViajePage({ params }: Props) {
 
       {plan && <PlanVsReal plan={plan} kmReal={v.km} gastos={gastos} />}
 
-      <LugaresRecorrido viajeId={v.id} lugares={v.lugares ?? null} gpxUrl={v.gpx_url} ruta={v.ruta} editable />
+      <LugaresRecorrido viajeId={v.id} lugares={v.lugares ?? null} gpxUrl={v.gpx_url} ruta={v.ruta} fotos={v.fotos} editable />
 
       {entradasDiario.length > 0 && (
         <section className="space-y-4">
