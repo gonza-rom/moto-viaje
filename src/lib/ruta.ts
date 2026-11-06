@@ -80,8 +80,12 @@ type RespNominatim = {
   address?: Record<string, string>;
 };
 
+/** En OSM de Argentina las localidades suelen venir como "Municipio de Fiambalá", "Comuna de…" */
+export const limpiarNombreLugar = (s?: string) =>
+  s?.replace(/^(municipio|comuna|comisi[oó]n municipal|partido|departamento|delegaci[oó]n municipal)( de(l)?)? /i, "").trim() || undefined;
+
 const lugarDe = (a: Record<string, string> = {}) => ({
-  nombre: a.city || a.town || a.village || a.hamlet || a.municipality || a.county || a.state_district || undefined,
+  nombre: limpiarNombreLugar(a.city || a.town || a.village || a.hamlet || a.municipality || a.county || a.state_district),
   provincia: a.state || a.province || a.region || undefined,
   pais: a.country || undefined,
 });
@@ -111,7 +115,7 @@ export function nombrarLugar(lat: number, lng: number): Promise<{ nombre?: strin
   const tarea = colaReverse.then(async () => {
     try {
       const r = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=12&addressdetails=1&accept-language=es&lat=${lat}&lon=${lng}`
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&addressdetails=1&accept-language=es&lat=${lat}&lon=${lng}`
       );
       if (!r.ok) return null;
       const j = (await r.json()) as RespNominatim;

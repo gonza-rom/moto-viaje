@@ -6,6 +6,7 @@
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/supabase";
+import { limpiarNombreLugar } from "@/lib/ruta";
 import { requerirSesion } from "@/lib/sesion";
 import { TIPOS_GASTO } from "@/lib/gastos";
 import { TIPOS_MANT } from "@/lib/mantenimiento";
@@ -166,7 +167,7 @@ export async function guardarAltimetria(id: string, a: Altimetria) {
 
 type Direccion = Record<string, string>;
 const lugarDeDireccion = (a: Direccion = {}) => ({
-  lugar: a.city || a.town || a.village || a.hamlet || a.municipality || a.county || a.state_district || "",
+  lugar: limpiarNombreLugar(a.city || a.town || a.village || a.hamlet || a.municipality || a.county || a.state_district) ?? "",
   provincia: a.state || a.province || a.region || null,
   pais: a.country || null,
 });
@@ -221,7 +222,7 @@ export async function detectarLugares(): Promise<{ hechas: number; pendientes: n
       pedidos++;
       try {
         const r = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=12&addressdetails=1&accept-language=es&lat=${f.lat}&lon=${f.lng}`,
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&addressdetails=1&accept-language=es&lat=${f.lat}&lon=${f.lng}`,
           { headers: { "User-Agent": "moto-viajes/1.0 (diario personal de viajes)" }, signal: AbortSignal.timeout(8000) }
         );
         if (!r.ok) throw new Error(`OpenStreetMap respondió ${r.status}`);
