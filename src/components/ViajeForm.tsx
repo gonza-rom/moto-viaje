@@ -487,6 +487,8 @@ export function ViajeForm({
 
   useEffect(() => {
     const previo = leerBorrador(claveBorrador);
+    // Viene del planificador: cargar la ruta planeada directamente
+    if (previo?.desdePlan) setAutoRecuperar(true);
     if (previo) setBorradorPrevio(previo);
     else retomarPendientes();
     setEnLinea(navigator.onLine);
@@ -503,6 +505,15 @@ export function ViajeForm({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const [autoRecuperar, setAutoRecuperar] = useState(false);
+  useEffect(() => {
+    if (autoRecuperar && borradorPrevio) {
+      setAutoRecuperar(false);
+      recuperarBorrador();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRecuperar, borradorPrevio]);
 
   function datosBorrador() {
     const f = formRef.current;

@@ -100,7 +100,7 @@ export async function buscarLugar(q: string, signal?: AbortSignal): Promise<Para
   return {
     lat: r5(+res.lat),
     lng: r5(+res.lon),
-    nombre: res.name || l.nombre || res.display_name.split(",")[0],
+    nombre: limpiarNombreLugar(res.name) || l.nombre || res.display_name.split(",")[0],
     ...(l.provincia ? { provincia: l.provincia } : {}),
     ...(l.pais ? { pais: l.pais } : {}),
   };

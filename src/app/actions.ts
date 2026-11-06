@@ -74,6 +74,15 @@ const str = (fd: FormData, k: string) => {
   const v = String(fd.get(k) ?? "").trim();
   return v === "" ? null : v;
 };
+/** Litros del tanque: decimal con coma o punto, entre 2 y 60 */
+const tanque = (fd: FormData) => {
+  const v = str(fd, "tanque_litros");
+  if (v === null) return null;
+  const n = parseFloat(v.replace(",", "."));
+  if (!Number.isFinite(n) || n < 2 || n > 60) throw new ErrorUsuario("El tanque tiene que ser entre 2 y 60 litros");
+  return Math.round(n * 10) / 10;
+};
+
 const int = (fd: FormData, k: string) => {
   const v = str(fd, k);
   if (v === null) return null;
@@ -331,6 +340,18 @@ export async function cambiarCategoria(id: string, categoria: string | null): Pr
   return { ok: "Categoría guardada" };
 }
 
+/** Misma categoría para varias fotos a la vez (selección múltiple en la galería) */
+export async function cambiarCategoriaVarias(ids: string[], categoria: string | null): Promise<Estado> {
+  await requerirSesion();
+  if (categoria !== null && !esCategoria(categoria)) return { error: "Categoría inválida" };
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const validos = (Array.isArray(ids) ? ids : []).filter((x) => typeof x === "string" && UUID.test(x)).slice(0, 500);
+  if (!validos.length) return { error: "No hay fotos seleccionadas" };
+  const { error } = await db().from("fotos").update({ categoria }).in("id", validos);
+  if (error) return { error: mensaje(error, "cambiar la categoría") };
+  return { ok: "Categoría guardada" };
+}
+
 /* ───────────── Motos ───────────── */
 
 function datosMoto(fd: FormData) {
@@ -343,6 +364,7 @@ function datosMoto(fd: FormData) {
     modelo: str(fd, "modelo"),
     anio,
     km_iniciales: int(fd, "km_iniciales") ?? 0,
+    tanque_litros: tanque(fd),
   };
 }
 

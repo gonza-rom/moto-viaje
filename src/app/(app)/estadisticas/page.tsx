@@ -71,7 +71,7 @@ export default async function Estadisticas() {
   // Lugares (de las paradas de las rutas marcadas y de dónde se sacaron las fotos)
   const lugares = new Map<string, Map<string, Set<string>>>(); // país → provincia → viajes
   for (const v of viajes) {
-    const conProvincia = [...(v.ruta?.paradas ?? []), ...v.fotos.map((f) => ({ provincia: f.provincia, pais: f.pais }))];
+    const conProvincia = [...(v.ruta?.paradas ?? []), ...v.fotos.map((f) => ({ provincia: f.provincia, pais: f.pais })), ...(v.lugares ?? [])];
     for (const p of conProvincia) {
       if (!p.provincia) continue;
       const pais = p.pais ?? "—";
@@ -204,7 +204,7 @@ export default async function Estadisticas() {
             </>
           ) : (
             <p className="text-sm text-niebla">
-              Se completa con las paradas de las rutas que marques en el mapa y con la ubicación de las fotos.
+              Se completa con el recorrido de cada viaje (abrí el viaje para que lo calcule), las paradas y la ubicación de las fotos.
             </p>
           )}
         </section>

@@ -19,6 +19,7 @@ import {
   Plus,
   Route,
   Trophy,
+  Fuel,
   type LucideIcon,
 } from "lucide-react";
 
@@ -140,12 +141,14 @@ export default async function Dashboard() {
             ? `${num(Math.floor((total / 40075) * 10) / 10)} vueltas a la Tierra`
             : `${num(Math.round((total / 40075) * 1000) / 10)}% de una vuelta a la Tierra`}
         </p>
-        <Link
-          href="/estadisticas"
-          className="absolute top-5 right-5 inline-flex items-center gap-1.5 rounded-full border border-linea bg-asfalto/60 px-3 py-1.5 text-xs font-semibold text-niebla hover:text-white md:top-7 md:right-7"
-        >
-          <Trophy className="size-3.5" /> Estadísticas
-        </Link>
+        <div className="absolute top-5 right-5 flex gap-2 md:top-7 md:right-7">
+          <Link href="/planificar" className="inline-flex items-center gap-1.5 rounded-full border border-linea bg-asfalto/60 px-3 py-1.5 text-xs font-semibold text-niebla hover:text-white">
+            <Fuel className="size-3.5" /> Planificar
+          </Link>
+          <Link href="/estadisticas" className="inline-flex items-center gap-1.5 rounded-full border border-linea bg-asfalto/60 px-3 py-1.5 text-xs font-semibold text-niebla hover:text-white">
+            <Trophy className="size-3.5" /> Estadísticas
+          </Link>
+        </div>
         <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
           <Stat icono={ChartColumn} label={`En ${anioActual}`} valor={km(esteAnio)} />
           <Stat icono={Route} label="Viajes" valor={num(viajes.length)} />

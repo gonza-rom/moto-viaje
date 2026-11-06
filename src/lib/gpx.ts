@@ -10,7 +10,7 @@ export function parseGpx(xml: string): Punto[] {
     .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b));
 }
 
-function haversine([lat1, lon1]: Punto, [lat2, lon2]: Punto): number {
+export function haversine([lat1, lon1]: Punto, [lat2, lon2]: Punto): number {
   const R = 6371; // km
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);

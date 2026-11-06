@@ -8,6 +8,8 @@ export type Moto = {
   modelo: string | null;
   anio: number | null;
   km_iniciales: number;
+  /** Litros del tanque (planificador: autonomía) */
+  tanque_litros: number | null;
   created_at: string;
 };
 
@@ -59,8 +61,12 @@ export type Viaje = {
   diario: Record<string, string> | null;
   etiquetas: string[];
   altimetria: Altimetria | null;
+  /** Localidades por las que pasa el recorrido (null = falta buscarlas) */
+  lugares: LugarRecorrido[] | null;
   created_at: string;
 };
+
+export type LugarRecorrido = { nombre: string; provincia?: string; pais?: string; km: number; lat: number; lng: number };
 
 /** Perfil de altura del recorrido (calculado una vez y guardado) */
 export type Altimetria = {

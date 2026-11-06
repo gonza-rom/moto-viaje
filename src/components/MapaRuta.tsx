@@ -22,11 +22,14 @@ export default function MapaRuta({
   puntos: puntosIniciales,
   ruta,
   fotos = [],
+  marcadores = [],
 }: {
   url?: string | null;
   puntos?: Punto[];
   ruta?: Ruta | null;
   fotos?: FotoEnMapa[];
+  /** Puntos sueltos con nombre (p. ej. estaciones de servicio en el planificador) */
+  marcadores?: { lat: number; lng: number; nombre: string; color?: string }[];
 }) {
   const [gpx, setGpx] = useState<Punto[] | null>(puntosIniciales ?? null);
   const [estado, setEstado] = useState<"ok" | "cargando" | "error">(url && !puntosIniciales ? "cargando" : "ok");
@@ -104,6 +107,12 @@ export default function MapaRuta({
               </CircleMarker>
             </>
           )}
+
+      {marcadores.map((m, i) => (
+        <CircleMarker key={`m${i}`} center={[m.lat, m.lng]} radius={6} pathOptions={{ color: "#fff", weight: 2, fillColor: m.color ?? "#38bdf8", fillOpacity: 1 }}>
+          <Tooltip>{m.nombre}</Tooltip>
+        </CircleMarker>
+      ))}
 
       {fotos.map((f) => (
         <Marker

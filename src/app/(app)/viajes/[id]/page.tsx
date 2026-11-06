@@ -29,11 +29,13 @@ import { agruparPorDia, fechaHoraFoto } from "@/lib/fotos";
 import Altimetria from "@/components/Altimetria";
 import { PanelGastos } from "@/components/PanelGastos";
 import { CompartirViaje } from "@/components/CompartirViaje";
+import { BotonTarjeta } from "@/components/BotonTarjeta";
 import { cldMiniatura, cldSrcSet } from "@/lib/cld";
 import { dias, km, num, rangoFechas } from "@/lib/format";
 import { linkGoogleMaps } from "@/lib/ruta";
 import { Galeria } from "@/components/Galeria";
 import { DetectarLugares } from "@/components/DetectarLugares";
+import { LugaresRecorrido } from "@/components/LugaresRecorrido";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { MapaRutaLazy } from "@/components/mapas";
 import { eliminarViaje } from "@/app/actions";
@@ -159,6 +161,8 @@ export default async function ViajePage({ params }: Props) {
         </section>
       )}
 
+      <LugaresRecorrido viajeId={v.id} lugares={v.lugares ?? null} gpxUrl={v.gpx_url} ruta={v.ruta} editable />
+
       {entradasDiario.length > 0 && (
         <section className="space-y-4">
           <h2 className="flex items-center gap-2 font-display text-3xl font-bold uppercase">
@@ -200,7 +204,7 @@ export default async function ViajePage({ params }: Props) {
             agrupar="dia"
             fechaInicio={v.fecha_inicio}
             diario={porDias ? v.diario : null}
-            sugerencias={[v.origen, v.destino, ...(v.ruta?.paradas ?? []).map((p) => p.nombre)].filter((x): x is string => !!x)}
+            sugerencias={[v.origen, v.destino, ...(v.ruta?.paradas ?? []).map((p) => p.nombre), ...(v.lugares ?? []).map((l) => l.nombre)].filter((x): x is string => !!x)}
           />
         </section>
       )}
@@ -218,6 +222,7 @@ export default async function ViajePage({ params }: Props) {
             <Share2 className="size-3.5" /> Compartir
           </h2>
           <CompartirViaje viajeId={v.id} titulo={v.titulo} token={v.compartir_token} />
+          <BotonTarjeta viajeId={v.id} titulo={v.titulo} />
         </div>
         <div className="card space-y-3 p-5">
           <h2 className="label flex items-center gap-1.5">

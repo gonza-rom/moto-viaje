@@ -70,6 +70,10 @@ export function MotoForm({
           <label className="label" htmlFor={`km-${id}`}>Km al empezar a registrar</label>
           <input id={`km-${id}`} name="km_iniciales" inputMode="numeric" defaultValue={moto?.km_iniciales || ""} placeholder="0" className="input" />
         </div>
+        <div>
+          <label className="label" htmlFor={`tanque-${id}`}>Tanque (litros)</label>
+          <input id={`tanque-${id}`} name="tanque_litros" inputMode="decimal" defaultValue={moto?.tanque_litros ?? ""} placeholder="12" className="input" />
+        </div>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-3">
         {estado?.error && (

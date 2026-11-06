@@ -6,6 +6,8 @@ import {
   ArrowRight,
   Calendar,
   Camera,
+  Check,
+  CheckSquare,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -20,7 +22,7 @@ import {
 import { cldMiniatura, cldOriginal, cldPoster, cldSrcSet, cldUrl, cldVideo, duracionTxt } from "@/lib/cld";
 import { agruparPorDia, fechaHoraFoto, linkMapa, type Grupo } from "@/lib/fotos";
 import { rangoFechas } from "@/lib/format";
-import { cambiarCategoria, marcarFavorita } from "@/app/actions";
+import { cambiarCategoria, cambiarCategoriaVarias, marcarFavorita } from "@/app/actions";
 import { ponerLugar } from "@/app/acciones-extra";
 import { CATEGORIAS, nombreCategoria, textoLugar, type Categoria } from "@/lib/categorias";
 import type { Foto, FotoConViaje } from "@/lib/types";
@@ -60,6 +62,15 @@ export function Galeria({
   const [favs, setFavs] = useState<Record<string, boolean>>({});
   const [abierta, setAbierta] = useState<string | null>(null);
   const [touchX, setTouchX] = useState<number | null>(null);
+  // Selección múltiple (null = apagada)
+  const [seleccion, setSeleccion] = useState<Set<string> | null>(null);
+  const alternarSel = (ids: string[], poner?: boolean) =>
+    setSeleccion((s) => {
+      const n = new Set(s ?? []);
+      const todas = ids.every((id) => n.has(id));
+      for (const id of ids) (poner ?? !todas) ? n.add(id) : n.delete(id);
+      return n;
+    });
   // Lugares puestos a mano en esta sesión
   const [lugares, setLugares] = useState<Record<string, Pick<Foto, "lugar" | "provincia" | "pais">>>({});
   const fotos = useMemo(
@@ -230,22 +241,37 @@ export function Galeria({
   ];
 
   return (
-    <div className="space-y-5">
-      {modos.length > 1 && (
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-niebla">Agrupar:</span>
-          <div className="inline-flex overflow-hidden rounded-full border border-linea">
-            {modos.map((m) => (
-              <button
-                key={m.k}
-                type="button"
-                onClick={() => setModo(m.k)}
-                className={`px-3 py-1.5 font-semibold transition ${modo === m.k ? "bg-white/10 text-white" : "text-niebla hover:text-white"}`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
+    <div className={`space-y-5 ${seleccion ? "pb-40 md:pb-28" : ""}`}>
+      {(modos.length > 1 || !soloLectura) && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {modos.length > 1 && (
+            <>
+              <span className="text-niebla">Agrupar:</span>
+              <div className="inline-flex overflow-hidden rounded-full border border-linea">
+                {modos.map((m) => (
+                  <button
+                    key={m.k}
+                    type="button"
+                    onClick={() => setModo(m.k)}
+                    className={`px-3 py-1.5 font-semibold transition ${modo === m.k ? "bg-white/10 text-white" : "text-niebla hover:text-white"}`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {!soloLectura && (
+            <button
+              type="button"
+              onClick={() => setSeleccion((s) => (s ? null : new Set()))}
+              className={`ml-auto inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-semibold transition ${
+                seleccion ? "border-naranja bg-naranja text-black" : "border-linea text-niebla hover:text-white"
+              }`}
+            >
+              <CheckSquare className="size-3.5" /> {seleccion ? "Terminar" : "Seleccionar"}
+            </button>
+          )}
         </div>
       )}
 
@@ -282,7 +308,17 @@ export function Galeria({
                 <h3 className="font-display text-xl font-bold uppercase">{g.titulo}</h3>
               )}
               {g.subtitulo && <span className="text-xs text-niebla">{g.subtitulo}</span>}
-              <span className="ml-auto text-xs text-niebla">{g.items.length}</span>
+              {seleccion ? (
+                <button
+                  type="button"
+                  onClick={() => alternarSel(g.items.map((f) => f.id))}
+                  className="ml-auto text-xs font-semibold text-naranja"
+                >
+                  {g.items.every((f) => seleccion.has(f.id)) ? "Quitar todas" : `Elegir las ${g.items.length}`}
+                </button>
+              ) : (
+                <span className="ml-auto text-xs text-niebla">{g.items.length}</span>
+              )}
             </div>
           )}
           {modo === "dia" && diario?.[g.clave] && (
@@ -292,9 +328,29 @@ export function Galeria({
             {g.items.map((f) => (
               <button
                 key={f.id}
-                onClick={() => setAbierta(f.id)}
-                className="group relative mb-2 block w-full overflow-hidden rounded-xl bg-grafito focus:ring-2 focus:ring-naranja focus:outline-none"
+                onClick={() => (seleccion ? alternarSel([f.id]) : setAbierta(f.id))}
+                aria-pressed={seleccion ? seleccion.has(f.id) : undefined}
+                className={`group relative mb-2 block w-full overflow-hidden rounded-xl bg-grafito focus:ring-2 focus:ring-naranja focus:outline-none ${
+                  seleccion?.has(f.id) ? "ring-3 ring-naranja" : ""
+                }`}
               >
+                {seleccion && (
+                  <span
+                    className={`pointer-events-none absolute top-2 right-2 z-10 grid size-6 place-items-center rounded-full border-2 ${
+                      seleccion.has(f.id) ? "border-naranja bg-naranja text-black" : "border-white/80 bg-black/40"
+                    }`}
+                  >
+                    {seleccion.has(f.id) && <Check className="size-4" strokeWidth={3} />}
+                  </span>
+                )}
+                {seleccion && !seleccion.has(f.id) && <span className="pointer-events-none absolute inset-0 z-[1] bg-black/25" />}
+                {/* Seleccionando: qué tiene cada foto, para ver qué falta */}
+                {seleccion && (catDe(f) || f.lugar) && (
+                  <span className="pointer-events-none absolute inset-x-1.5 bottom-1.5 z-10 flex flex-wrap gap-1">
+                    {catDe(f) && <span className="rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">{nombreCategoria(catDe(f))}</span>}
+                    {f.lugar && <span className="truncate rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">📍 {f.lugar}</span>}
+                  </span>
+                )}
                 {f.tipo === "video" && (
                   <span className="pointer-events-none absolute inset-0 grid place-items-center">
                     <span className="grid size-12 place-items-center rounded-full bg-black/60 text-white backdrop-blur-sm">
@@ -328,6 +384,20 @@ export function Galeria({
           </div>
         </section>
       ))}
+
+      {seleccion && (
+        <BarraSeleccion
+          ids={[...seleccion]}
+          visibles={lista.map((f) => f.id)}
+          fotos={fotos}
+          sugerencias={sugerencias}
+          onElegirTodas={() => alternarSel(lista.map((f) => f.id), true)}
+          onLimpiar={() => setSeleccion(new Set())}
+          onCategoria={(ids, c) => setCats((x) => ({ ...x, ...Object.fromEntries(ids.map((id) => [id, c])) }))}
+          onLugar={(ids, l) => setLugares((x) => ({ ...x, ...Object.fromEntries(ids.map((id) => [id, l])) }))}
+          onTerminar={() => setSeleccion(null)}
+        />
+      )}
 
       {/* Visor */}
       {actual && (
@@ -579,5 +649,150 @@ function EditorLugar({
       )}
       {msj && <p className="w-full text-[11px] text-niebla">{msj}</p>}
     </form>
+  );
+}
+
+/** Barra fija abajo: categoría o lugar para todas las fotos seleccionadas */
+function BarraSeleccion({
+  ids,
+  visibles,
+  fotos,
+  sugerencias,
+  onElegirTodas,
+  onLimpiar,
+  onCategoria,
+  onLugar,
+  onTerminar,
+}: {
+  ids: string[];
+  visibles: string[];
+  fotos: Item[];
+  sugerencias: string[];
+  onElegirTodas: () => void;
+  onLimpiar: () => void;
+  onCategoria: (ids: string[], c: Categoria | null) => void;
+  onLugar: (ids: string[], l: Pick<Foto, "lugar" | "provincia" | "pais">) => void;
+  onTerminar: () => void;
+}) {
+  const [panel, setPanel] = useState<"cat" | "lugar" | null>(null);
+  const [texto, setTexto] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [msj, setMsj] = useState("");
+  const n = ids.length;
+  const opciones = useMemo(
+    () => [...new Set([...fotos.map((f) => textoLugar(f)).filter(Boolean), ...sugerencias])].sort((a, b) => a.localeCompare(b, "es")),
+    [fotos, sugerencias]
+  );
+
+  async function categoria(c: Categoria | null) {
+    setGuardando(true);
+    const r = await cambiarCategoriaVarias(ids, c).catch(() => ({ error: "Sin conexión" }));
+    setGuardando(false);
+    if (r?.error) return setMsj(r.error);
+    onCategoria(ids, c);
+    setPanel(null);
+    setMsj(c ? `${nombreCategoria(c)} en ${n} ${n === 1 ? "foto" : "fotos"}` : `Categoría quitada de ${n}`);
+  }
+
+  async function lugar(e: React.FormEvent) {
+    e.preventDefault();
+    setGuardando(true);
+    const r = await ponerLugar(ids, texto).catch(() => ({ lugar: null, provincia: null, pais: null, error: "Sin conexión" }));
+    setGuardando(false);
+    if (r.error) return setMsj(r.error);
+    onLugar(ids, { lugar: r.lugar, provincia: r.provincia, pais: r.pais });
+    setPanel(null);
+    setTexto("");
+    setMsj(r.lugar ? `📍 ${textoLugar(r)} en ${n} ${n === 1 ? "foto" : "fotos"}` : `Lugar quitado de ${n}`);
+  }
+
+  return (
+    <div className="fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-40 px-3 md:bottom-4">
+      <div className="mx-auto max-w-2xl space-y-2 rounded-2xl border border-linea bg-carbon/95 p-3 shadow-2xl backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="font-semibold">
+            {n} {n === 1 ? "seleccionada" : "seleccionadas"}
+          </span>
+          {n < visibles.length ? (
+            <button type="button" onClick={onElegirTodas} className="text-xs text-naranja">
+              Elegir las {visibles.length}
+            </button>
+          ) : (
+            <button type="button" onClick={onLimpiar} className="text-xs text-niebla">
+              Ninguna
+            </button>
+          )}
+          <div className="ml-auto flex gap-2">
+            <button
+              type="button"
+              disabled={!n || guardando}
+              onClick={() => (setPanel(panel === "cat" ? null : "cat"), setMsj(""))}
+              className={`btn-ghost px-3 py-1.5 text-xs disabled:opacity-40 ${panel === "cat" ? "border-naranja text-naranja" : ""}`}
+            >
+              <Tag className="size-3.5" /> Categoría
+            </button>
+            <button
+              type="button"
+              disabled={!n || guardando}
+              onClick={() => (setPanel(panel === "lugar" ? null : "lugar"), setMsj(""))}
+              className={`btn-ghost px-3 py-1.5 text-xs disabled:opacity-40 ${panel === "lugar" ? "border-naranja text-naranja" : ""}`}
+            >
+              <MapPin className="size-3.5" /> Lugar
+            </button>
+            <button type="button" onClick={onTerminar} className="btn-ghost px-2.5 py-1.5" title="Terminar">
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
+
+        {panel === "cat" && (
+          <div className="flex flex-wrap gap-1.5">
+            {CATEGORIAS.map((c) => (
+              <button
+                key={c.valor}
+                type="button"
+                disabled={guardando}
+                onClick={() => categoria(c.valor)}
+                className="rounded-full border border-linea px-3 py-1.5 text-xs font-medium hover:border-naranja hover:text-naranja disabled:opacity-50"
+              >
+                {c.label}
+              </button>
+            ))}
+            <button type="button" disabled={guardando} onClick={() => categoria(null)} className="px-2 text-xs text-niebla underline">
+              Quitar
+            </button>
+          </div>
+        )}
+
+        {panel === "lugar" && (
+          <form onSubmit={lugar} className="flex gap-2">
+            <input
+              autoFocus
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              list="mv-lugares-sel"
+              maxLength={120}
+              placeholder="Ej: Tafí del Valle (vacío = quitar)"
+              aria-label="Lugar para las seleccionadas"
+              className="input min-w-0 flex-1 py-2 text-sm"
+            />
+            <datalist id="mv-lugares-sel">
+              {opciones.map((o) => (
+                <option key={o} value={o} />
+              ))}
+            </datalist>
+            <button disabled={guardando} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
+              {guardando ? "…" : "Poner"}
+            </button>
+          </form>
+        )}
+
+        {msj && (
+          <p className="text-xs text-niebla" role="status">
+            {msj}
+          </p>
+        )}
+      </div>
+    </div>
   );
 }

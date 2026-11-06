@@ -7,6 +7,7 @@ import { dias, km, num, rangoFechas } from "@/lib/format";
 import { Galeria } from "@/components/Galeria";
 import { MapaRutaLazy } from "@/components/mapas";
 import Altimetria from "@/components/Altimetria";
+import { LugaresRecorrido } from "@/components/LugaresRecorrido";
 
 // Vista pública de solo lectura de un viaje compartido. Sin login.
 // Sin notas, diario, gastos ni odómetro (getViajeCompartido los quita).
@@ -97,6 +98,10 @@ export default async function ViajeCompartido({ params }: Props) {
             </div>
           )}
         </section>
+      )}
+
+      {v.lugares && v.lugares.length > 0 && (
+        <LugaresRecorrido viajeId={v.id} lugares={v.lugares} gpxUrl={v.gpx_url} ruta={v.ruta} />
       )}
 
       {v.fotos.length > 0 && (

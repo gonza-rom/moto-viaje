@@ -10,7 +10,7 @@ import { limpiarNombreLugar } from "@/lib/ruta";
 import { requerirSesion } from "@/lib/sesion";
 import { TIPOS_GASTO } from "@/lib/gastos";
 import { TIPOS_MANT } from "@/lib/mantenimiento";
-import type { Altimetria, Gasto, Mantenimiento } from "@/lib/types";
+import type { Altimetria, Gasto, LugarRecorrido, Mantenimiento } from "@/lib/types";
 import type { Estado } from "./actions";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -300,4 +300,22 @@ export async function ponerLugar(
   if (error) return { ...vacio, error: error.message };
   revalidatePath("/estadisticas");
   return fila;
+}
+
+/* ───────────── Localidades del recorrido ───────────── */
+
+/** Guarda las localidades por las que pasa el recorrido (calculadas en el navegador) */
+export async function guardarLugaresRecorrido(id: string, lugares: LugarRecorrido[]) {
+  await requerirSesion();
+  if (!UUID.test(id) || !Array.isArray(lugares) || lugares.length > 300) return { error: "Datos inválidos" };
+  const t = (s: unknown) => (typeof s === "string" && s.trim() ? s.trim().slice(0, 120) : undefined);
+  const n = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : null);
+  const limpios = lugares
+    .map((l) => ({ nombre: t(l?.nombre), provincia: t(l?.provincia), pais: t(l?.pais), km: n(l?.km), lat: n(l?.lat), lng: n(l?.lng) }))
+    .filter((l) => l.nombre && l.km !== null && l.lat !== null && l.lng !== null && Math.abs(l.lat!) <= 90 && Math.abs(l.lng!) <= 180)
+    .map((l) => ({ ...l, km: Math.round(l.km! * 10) / 10 }));
+  const { error } = await db().from("viajes").update({ lugares: limpios }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/estadisticas");
+  return { ok: true };
 }
