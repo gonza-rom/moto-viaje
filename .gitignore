@@ -5,3 +5,13 @@ node_modules
 next-env.d.ts
 *.tsbuildinfo
 .vercel
+
+# Recorridos y fotos personales (no subir al repo público)
+/*.kmz
+/*.kml
+/*.gpx
+/*.jpg
+/*.jpeg
+/*.heic
+/*.mp4
+/*.mov
