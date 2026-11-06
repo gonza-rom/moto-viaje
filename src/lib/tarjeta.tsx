@@ -33,7 +33,7 @@ function cargarFuentes() {
 }
 
 /** Puntos del recorrido: ruta trazada o GPX (parseo simple, sin DOMParser) */
-async function puntosDe(v: ViajeConRelaciones): Promise<Punto[]> {
+export async function puntosDe(v: ViajeConRelaciones): Promise<Punto[]> {
   if (v.ruta?.trazo && v.ruta.trazo.length > 1) return v.ruta.trazo;
   if (!v.gpx_url) return [];
   try {
@@ -198,6 +198,105 @@ export async function tarjetaViaje(v: ViajeConRelaciones, formato: Formato, head
           }}
         >
           {cuadrado ? [bloqueRuta, bloqueTexto] : [bloqueTexto, bloqueRuta]}
+        </div>
+      </div>
+    ),
+    { width, height, fonts, headers }
+  );
+}
+
+/* ───────────── "Mi año en moto" ───────────── */
+
+export type ResumenAnio = {
+  anio: number;
+  km: number;
+  viajes: number;
+  dias: number;
+  provincias: string[]; // nombres del mapa (provinciaDelMapa)
+  alturaMax: number | null;
+  foto: { public_id: string; tipo: "image" | "video" } | null;
+  recorridos: Punto[][];
+};
+
+export async function tarjetaAnio(r: ResumenAnio, formato: Formato, headers?: HeadersInit) {
+  const { width, height } = TAMANOS[formato];
+  const cuadrado = formato === "cuadrado";
+  const fonts = await cargarFuentes();
+  const { default: mapa } = await import("@/data/provincias-ar.json");
+  const fondo = r.foto
+    ? r.foto.tipo === "video"
+      ? `https://res.cloudinary.com/${CLOUD}/video/upload/so_1,f_jpg,q_70,c_fill,g_auto,w_${width},h_${height}/${r.foto.public_id}.jpg`
+      : `https://res.cloudinary.com/${CLOUD}/image/upload/f_jpg,q_70,c_fill,g_auto,w_${width},h_${height}/${r.foto.public_id}`
+    : null;
+
+  // Mapa: alto disponible y escala desde el viewBox de provincias
+  const altoMapa = height - (cuadrado ? 120 : 90);
+  const escMapa = altoMapa / mapa.alto;
+  const anchoMapa = Math.round(mapa.ancho * escMapa);
+  const set = new Set(r.provincias);
+  const { k, x0, y0, esc } = mapa.proy;
+  const proyectar = ([lat, lon]: Punto) => [(lon * k - x0) * esc, (-lat - y0) * esc] as const;
+  const trazos = r.recorridos
+    .filter((p) => p.length > 1)
+    .map((p) => reducir(p, 300).map((q, i) => { const [x, y] = proyectar(q); return `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`; }).join(" "));
+
+  const datos = [
+    { valor: `${r.viajes}`, label: r.viajes === 1 ? "viaje" : "viajes" },
+    { valor: `${r.dias}`, label: r.dias === 1 ? "día en ruta" : "días en ruta" },
+    { valor: `${set.size}`, label: set.size === 1 ? "provincia" : "provincias" },
+    ...(r.alturaMax ? [{ valor: `${num(r.alturaMax)} m`, label: "altura máx." }] : []),
+  ];
+
+  return new ImageResponse(
+    (
+      <div style={{ width, height, display: "flex", position: "relative", background: "#0f0f10", color: "white", fontFamily: "Barlow" }}>
+        {fondo && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={fondo} width={width} height={height} style={{ position: "absolute", top: 0, left: 0, objectFit: "cover" }} alt="" />
+        )}
+        <div style={{ position: "absolute", top: 0, left: 0, width, height, display: "flex", background: "rgba(10,10,12,0.82)" }} />
+        <div style={{ position: "relative", display: "flex", width: "100%", height: "100%", padding: cuadrado ? 60 : 45, gap: 40 }}>
+          <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "space-between" }}>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", fontSize: 26, fontWeight: 700, letterSpacing: 5, color: NARANJA, textTransform: "uppercase" }}>
+                Mi año en moto
+              </div>
+              <div style={{ display: "flex", fontSize: cuadrado ? 170 : 130, fontWeight: 700, lineHeight: 0.9, marginTop: 6 }}>{r.anio}</div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", fontSize: cuadrado ? 120 : 92, fontWeight: 700, color: NARANJA, lineHeight: 0.9 }}>{num(Math.round(r.km))}</div>
+              <div style={{ display: "flex", fontSize: 28, fontWeight: 500, letterSpacing: 3, textTransform: "uppercase", color: "rgba(255,255,255,0.75)" }}>
+                kilómetros
+              </div>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: cuadrado ? 34 : 26 }}>
+              {datos.map((x) => (
+                <div key={x.label} style={{ display: "flex", flexDirection: "column", minWidth: 140 }}>
+                  <div style={{ display: "flex", fontSize: cuadrado ? 60 : 48, fontWeight: 700, lineHeight: 1 }}>{x.valor}</div>
+                  <div style={{ display: "flex", fontSize: 22, fontWeight: 500, color: "rgba(255,255,255,0.65)", textTransform: "uppercase", letterSpacing: 2 }}>
+                    {x.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <svg width={anchoMapa} height={altoMapa} viewBox={`0 0 ${mapa.ancho} ${mapa.alto}`}>
+              {mapa.provincias.map((p) => (
+                <path
+                  key={p.nombre}
+                  d={p.d}
+                  fill={set.has(p.nombre) ? NARANJA : "#2a2d33"}
+                  fillOpacity={set.has(p.nombre) ? 0.85 : 1}
+                  stroke="#0f0f10"
+                  strokeWidth={1.2}
+                />
+              ))}
+              {trazos.map((d, i) => (
+                <path key={`t${i}`} d={d} fill="none" stroke="white" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+              ))}
+            </svg>
+          </div>
         </div>
       </div>
     ),

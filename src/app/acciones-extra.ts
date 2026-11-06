@@ -6,7 +6,7 @@
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/supabase";
-import { limpiarNombreLugar } from "@/lib/ruta";
+import { limpiarNombreLugar, parseRuta } from "@/lib/ruta";
 import { requerirSesion } from "@/lib/sesion";
 import { TIPOS_GASTO } from "@/lib/gastos";
 import { TIPOS_MANT } from "@/lib/mantenimiento";
@@ -318,4 +318,62 @@ export async function guardarLugaresRecorrido(id: string, lugares: LugarRecorrid
   if (error) return { error: error.message };
   revalidatePath("/estadisticas");
   return { ok: true };
+}
+
+/* ───────────── Planes (planificador) ───────────── */
+
+type DatosPlan = {
+  nombre: string;
+  ruta: unknown;
+  consumo: number | null;
+  tanque: number | null;
+  precio: number | null;
+  reserva: number;
+  litros: number | null;
+  costo: number | null;
+};
+
+/** Guarda (o actualiza, si viene id) una ruta planificada */
+export async function guardarPlan(id: string | null, d: DatosPlan): Promise<{ id?: string; error?: string }> {
+  await requerirSesion();
+  const ruta = parseRuta(d?.ruta);
+  if (!ruta) return { error: "La ruta no es válida" };
+  const nombre = String(d?.nombre ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+  if (!nombre) return { error: "Poné un nombre para el plan" };
+  const n = (x: unknown, max: number) => (typeof x === "number" && Number.isFinite(x) && x >= 0 && x <= max ? x : null);
+  const fila = {
+    nombre,
+    ruta,
+    km: ruta.km,
+    consumo: n(d.consumo, 200),
+    tanque: n(d.tanque, 100),
+    precio: n(d.precio, 1e7),
+    reserva: Math.round(n(d.reserva, 50) ?? 15),
+    litros: n(d.litros, 1e5),
+    costo: n(d.costo, 1e10),
+  };
+  if (id) {
+    if (!UUID.test(id)) return { error: "Plan inválido" };
+    const { error } = await db().from("planes").update(fila).eq("id", id);
+    return error ? { error: error.message } : { id };
+  }
+  const { data, error } = await db().from("planes").insert(fila).select("id").single();
+  return error ? { error: error.message } : { id: data.id };
+}
+
+export async function borrarPlan(id: string) {
+  await requerirSesion();
+  if (UUID.test(id)) await db().from("planes").delete().eq("id", id);
+}
+
+/* ───────────── Álbum compartido ───────────── */
+
+/** Activa (token nuevo) o desactiva el link para que otros suban fotos al viaje */
+export async function albumViaje(id: string, activar: boolean): Promise<{ token: string | null; error?: string }> {
+  await requerirSesion();
+  if (!UUID.test(id)) return { token: null, error: "Viaje inválido" };
+  const token = activar ? randomBytes(18).toString("base64url") : null;
+  const { error } = await db().from("viajes").update({ album_token: token }).eq("id", id);
+  if (error) return { token: null, error: error.message };
+  return { token };
 }

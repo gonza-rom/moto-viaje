@@ -507,6 +507,8 @@ export function ViajeForm({
   }, []);
 
   const [autoRecuperar, setAutoRecuperar] = useState(false);
+  // Plan del planificador del que sale este viaje (para comparar lo planeado con lo real)
+  const [planId, setPlanId] = useState<string | null>(null);
   useEffect(() => {
     if (autoRecuperar && borradorPrevio) {
       setAutoRecuperar(false);
@@ -534,6 +536,7 @@ export function ViajeForm({
       gpx,
       diario,
       etiquetas,
+      planId,
     };
   }
 
@@ -560,6 +563,7 @@ export function ViajeForm({
     setGpx(b.gpx ?? null);
     setDiario(b.diario ?? {});
     setEtiquetas(Array.isArray(b.etiquetas) ? b.etiquetas : []);
+    setPlanId(typeof b.planId === "string" ? b.planId : null);
     setRuta(b.ruta ?? null);
     setRutaEditor(b.ruta ?? null);
     setVerEditor(!!b.ruta);
@@ -630,6 +634,7 @@ export function ViajeForm({
         </div>
       )}
       <input type="hidden" name="fotos" value={JSON.stringify(fotos)} />
+      {!viaje && planId && <input type="hidden" name="plan_id" value={planId} />}
       <input type="hidden" name="gpx_public_id" value={gpx?.public_id ?? ""} />
       <input type="hidden" name="gpx_url" value={gpx?.url ?? ""} />
       <input type="hidden" name="ruta" value={ruta ? JSON.stringify(ruta) : ""} />

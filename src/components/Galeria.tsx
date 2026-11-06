@@ -515,6 +515,11 @@ export function Galeria({
                   <MapPin className="size-3.5" /> {textoLugar(actual)}
                 </span>
               )}
+              {!soloLectura && actual.subida_por && (
+                <span className="flex items-center gap-1">
+                  <Camera className="size-3.5" /> {actual.subida_por}
+                </span>
+              )}
               {soloLectura && catDe(actual) && (
                 <span className="flex items-center gap-1">
                   <Tag className="size-3.5" /> {nombreCategoria(catDe(actual))}

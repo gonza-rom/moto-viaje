@@ -72,7 +72,10 @@ export default function Altimetria({
   gpxUrl,
   trazo,
   soloLectura = false,
+  onDatos,
 }: {
+  /** Avisa cuando la altura quedó calculada (planificador) */
+  onDatos?: (d: Datos) => void;
   viajeId?: string;
   inicial: Datos | null;
   gpxUrl?: string | null;
@@ -98,6 +101,7 @@ export default function Altimetria({
         if (!d) return setEstado("error");
         setDatos(d);
         setEstado("ok");
+        onDatos?.(d);
         if (viajeId) guardarAltimetria(viajeId, d).catch(() => {});
       } catch {
         setEstado("error");

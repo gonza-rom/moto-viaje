@@ -243,6 +243,9 @@ export async function crearViaje(_prev: Estado, fd: FormData): Promise<Estado> {
         throw e2;
       }
     }
+    // Viene del planificador: unir el plan con el viaje (comparación planeado / real)
+    const planId = str(fd, "plan_id");
+    if (planId && /^[0-9a-f-]{36}$/i.test(planId)) await db().from("planes").update({ viaje_id: id }).eq("id", planId);
   } catch (e) {
     return { error: mensaje(e, "guardar el viaje") };
   }

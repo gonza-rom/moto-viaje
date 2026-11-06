@@ -3,14 +3,29 @@
 import { useEffect, useState } from "react";
 import { Download, ImageIcon, LoaderCircle, Share2, X } from "lucide-react";
 
-/** Tarjeta del viaje (imagen): vista previa, compartir directo (WhatsApp, Instagram…) o descargar */
-export function BotonTarjeta({ viajeId, titulo }: { viajeId: string; titulo: string }) {
+/**
+ * Tarjeta (imagen) de un viaje o de un año: vista previa, compartir directo (WhatsApp, Instagram…) o descargar.
+ * variantes: opciones para elegir (p. ej. el año); base: URL de la imagen sin parámetros.
+ */
+export function BotonTarjeta({
+  viajeId,
+  titulo,
+  etiqueta = "Tarjeta para redes",
+  variantes,
+}: {
+  viajeId?: string;
+  titulo: string;
+  etiqueta?: string;
+  variantes?: { label: string; base: string }[];
+}) {
+  const [variante, setVariante] = useState(0);
+  const base = variantes?.[variante]?.base ?? `/api/tarjeta/${viajeId}`;
   const [abierta, setAbierta] = useState(false);
   const [formato, setFormato] = useState<"cuadrado" | "og">("cuadrado");
   const [cargando, setCargando] = useState(true);
   const [compartiendo, setCompartiendo] = useState(false);
   const [puedeCompartir, setPuedeCompartir] = useState(false);
-  const url = `/api/tarjeta/${viajeId}?formato=${formato}`;
+  const url = `${base}?formato=${formato}`;
 
   useEffect(() => {
     try {
@@ -44,12 +59,26 @@ export function BotonTarjeta({ viajeId, titulo }: { viajeId: string; titulo: str
   return (
     <>
       <button type="button" onClick={() => (setAbierta(true), setCargando(true))} className="btn-ghost">
-        <ImageIcon className="size-4" /> Tarjeta para redes
+        <ImageIcon className="size-4" /> {etiqueta}
       </button>
 
       {abierta && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4" onClick={() => setAbierta(false)}>
           <div className="card w-full max-w-md space-y-3 p-4" onClick={(e) => e.stopPropagation()}>
+            {variantes && variantes.length > 1 && (
+              <div className="flex flex-wrap gap-1.5">
+                {variantes.map((v, i) => (
+                  <button
+                    key={v.base}
+                    type="button"
+                    onClick={() => (setVariante(i), setCargando(true))}
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${i === variante ? "border-naranja bg-naranja text-black" : "border-linea text-niebla"}`}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <div className="inline-flex overflow-hidden rounded-full border border-linea text-xs">
                 {(

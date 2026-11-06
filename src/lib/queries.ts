@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./supabase";
-import type { FotoConViaje, Gasto, Mantenimiento, Moto, ViajeConRelaciones } from "./types";
+import type { FotoConViaje, Gasto, Mantenimiento, Moto, Plan, ViajeConRelaciones } from "./types";
 
 const SELECT_VIAJE = "*, motos(id, nombre), fotos(*)";
 
@@ -70,5 +70,50 @@ export async function getViajeCompartido(token: string): Promise<ViajeConRelacio
   if (!data) return null;
   const v = ordenarFotos(data as ViajeConRelaciones);
   // Nada de notas, diario ni odómetro en la vista pública
-  return { ...v, notas: null, diario: null, odometro_inicio: null, odometro_fin: null };
+  // ni el token del álbum (permite subir fotos), ni quién subió cada foto
+  return {
+    ...v,
+    notas: null,
+    diario: null,
+    odometro_inicio: null,
+    odometro_fin: null,
+    album_token: null,
+    fotos: v.fotos.map((f) => ({ ...f, subida_por: null })),
+  };
+}
+
+export async function getPlanes(): Promise<Plan[]> {
+  const { data, error } = await db().from("planes").select("*").order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data as Plan[]).map((p) => ({
+    ...p,
+    km: Number(p.km),
+    consumo: p.consumo === null ? null : Number(p.consumo),
+    tanque: p.tanque === null ? null : Number(p.tanque),
+    precio: p.precio === null ? null : Number(p.precio),
+    litros: p.litros === null ? null : Number(p.litros),
+    costo: p.costo === null ? null : Number(p.costo),
+  }));
+}
+
+/** Viaje por token del álbum compartido (solo lo necesario para la página de subida) */
+export async function getViajeAlbum(token: string) {
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
+  const { data, error } = await db()
+    .from("viajes")
+    .select("id, titulo, fecha_inicio, fecha_fin, fotos(count)")
+    .eq("album_token", token)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  const n = (data.fotos as unknown as { count: number }[])?.[0]?.count ?? 0;
+  return { id: data.id as string, titulo: data.titulo as string, fecha_inicio: data.fecha_inicio as string, fecha_fin: data.fecha_fin as string | null, nFotos: n };
+}
+
+/** Plan del planificador con el que se hizo un viaje (si hay) */
+export async function getPlanDeViaje(viajeId: string): Promise<Plan | null> {
+  const { data, error } = await db().from("planes").select("*").eq("viaje_id", viajeId).order("created_at", { ascending: false }).limit(1);
+  if (error || !data?.[0]) return null;
+  const p = data[0] as Plan;
+  return { ...p, km: Number(p.km), litros: p.litros === null ? null : Number(p.litros), costo: p.costo === null ? null : Number(p.costo) };
 }

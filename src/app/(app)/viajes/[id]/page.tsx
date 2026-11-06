@@ -22,20 +22,24 @@ import {
   Tag,
   Wallet,
   TrendingUp,
+  Play,
   type LucideIcon,
 } from "lucide-react";
-import { getGastos, getViaje } from "@/lib/queries";
+import { getGastos, getPlanDeViaje, getViaje } from "@/lib/queries";
 import { agruparPorDia, fechaHoraFoto } from "@/lib/fotos";
 import Altimetria from "@/components/Altimetria";
 import { PanelGastos } from "@/components/PanelGastos";
 import { CompartirViaje } from "@/components/CompartirViaje";
 import { BotonTarjeta } from "@/components/BotonTarjeta";
+import { AlbumCompartido } from "@/components/AlbumCompartido";
 import { cldMiniatura, cldSrcSet } from "@/lib/cld";
 import { dias, km, num, rangoFechas } from "@/lib/format";
 import { linkGoogleMaps } from "@/lib/ruta";
 import { Galeria } from "@/components/Galeria";
 import { DetectarLugares } from "@/components/DetectarLugares";
 import { LugaresRecorrido } from "@/components/LugaresRecorrido";
+import { PlanVsReal } from "@/components/PlanVsReal";
+import type { LugarRecorrido } from "@/lib/types";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { MapaRutaLazy } from "@/components/mapas";
 import { eliminarViaje } from "@/app/actions";
@@ -47,9 +51,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: v?.titulo ?? "Viaje" };
 }
 
+/** Localidades de "Pasaste por" como puntos del mapa (sin la salida/llegada, que ya tienen marcador) */
+const marcadoresLugares = (l: LugarRecorrido[] | null | undefined) =>
+  (l ?? []).slice(1, -1).map((x) => ({ lat: x.lat, lng: x.lng, nombre: `${x.nombre} · km ${Math.round(x.km)}`, color: "#e5e7eb", radio: 4 }));
+
 export default async function ViajePage({ params }: Props) {
   const { id } = await params;
-  const [v, gastos] = await Promise.all([getViaje(id), getGastos({ viajeId: id }).catch(() => [])]);
+  const [v, gastos, plan] = await Promise.all([getViaje(id), getGastos({ viajeId: id }).catch(() => []), getPlanDeViaje(id).catch(() => null)]);
   if (!v) notFound();
 
   // Diario: si la galería se agrupa por días, cada texto va arriba de las fotos de su día;
@@ -132,6 +140,11 @@ export default async function ViajePage({ params }: Props) {
             <h2 className="flex items-center gap-2 font-display text-3xl font-bold uppercase">
               <MapIcon className="size-6 text-naranja" /> Recorrido
             </h2>
+            {(v.gpx_url || v.ruta) && (
+              <Link href={`/viajes/${v.id}/recorrido`} className="btn-primary py-2">
+                <Play className="size-4" /> Ver animado
+              </Link>
+            )}
             {gmaps && (
               <a href={gmaps} target="_blank" rel="noopener noreferrer" className="btn-ghost py-2">
                 <ExternalLink className="size-4" /> Abrir en Google Maps
@@ -139,7 +152,7 @@ export default async function ViajePage({ params }: Props) {
             )}
           </div>
           <div className="h-80 overflow-hidden rounded-2xl border border-linea md:h-[28rem]">
-            <MapaRutaLazy url={v.gpx_url} ruta={v.ruta} fotos={fotosGps} />
+            <MapaRutaLazy url={v.gpx_url} ruta={v.ruta} fotos={fotosGps} marcadores={marcadoresLugares(v.lugares)} />
           </div>
           {v.ruta && v.ruta.paradas.some((p) => p.nombre) && (
             <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-niebla">
@@ -160,6 +173,8 @@ export default async function ViajePage({ params }: Props) {
           )}
         </section>
       )}
+
+      {plan && <PlanVsReal plan={plan} kmReal={v.km} gastos={gastos} />}
 
       <LugaresRecorrido viajeId={v.id} lugares={v.lugares ?? null} gpxUrl={v.gpx_url} ruta={v.ruta} editable />
 
@@ -223,6 +238,9 @@ export default async function ViajePage({ params }: Props) {
           </h2>
           <CompartirViaje viajeId={v.id} titulo={v.titulo} token={v.compartir_token} />
           <BotonTarjeta viajeId={v.id} titulo={v.titulo} />
+          <div className="border-t border-linea pt-3">
+            <AlbumCompartido viajeId={v.id} titulo={v.titulo} token={v.album_token ?? null} />
+          </div>
         </div>
         <div className="card space-y-3 p-5">
           <h2 className="label flex items-center gap-1.5">

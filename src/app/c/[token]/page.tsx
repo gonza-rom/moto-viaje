@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { ArrowRight, CalendarDays, Images, Map as MapIcon, Motorbike, Route, Tag, TrendingUp } from "lucide-react";
+import { ArrowRight, CalendarDays, Images, Map as MapIcon, Motorbike, Play, Route, Tag, TrendingUp } from "lucide-react";
 import { getViajeCompartido } from "@/lib/queries";
 import { cldMiniatura, cldSrcSet } from "@/lib/cld";
 import { dias, km, num, rangoFechas } from "@/lib/format";
@@ -29,7 +30,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ViajeCompartido({ params }: Props) {
-  const v = await getViajeCompartido((await params).token);
+  const { token } = await params;
+  const v = await getViajeCompartido(token);
   if (!v) notFound();
 
   const portada = v.fotos[0];
@@ -86,11 +88,23 @@ export default async function ViajeCompartido({ params }: Props) {
 
       {(v.gpx_url || v.ruta || fotosGps.length > 0) && (
         <section className="space-y-3">
-          <h2 className="flex items-center gap-2 font-display text-3xl font-bold uppercase">
-            <MapIcon className="size-6 text-naranja" /> Recorrido
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 font-display text-3xl font-bold uppercase">
+              <MapIcon className="size-6 text-naranja" /> Recorrido
+            </h2>
+            {(v.gpx_url || v.ruta) && (
+              <Link href={`/c/${token}/recorrido`} className="btn-primary py-2">
+                <Play className="size-4" /> Ver animado
+              </Link>
+            )}
+          </div>
           <div className="h-80 overflow-hidden rounded-2xl border border-linea md:h-[28rem]">
-            <MapaRutaLazy url={v.gpx_url} ruta={v.ruta} fotos={fotosGps} />
+            <MapaRutaLazy
+              url={v.gpx_url}
+              ruta={v.ruta}
+              fotos={fotosGps}
+              marcadores={(v.lugares ?? []).slice(1, -1).map((x) => ({ lat: x.lat, lng: x.lng, nombre: x.nombre, color: "#e5e7eb", radio: 4 }))}
+            />
           </div>
           {v.altimetria && (
             <div className="card p-4 md:p-5">

@@ -7,6 +7,7 @@ import { dias, km, num, rangoFechas } from "@/lib/format";
 import { MapaViajesLazy } from "@/components/mapas";
 import { cldMiniatura } from "@/lib/cld";
 import type { ViajeEnMapa } from "@/components/MapaViajes";
+import { recuerdosDeHoy } from "@/lib/recuerdos";
 import {
   ArrowRight,
   CalendarDays,
@@ -20,6 +21,7 @@ import {
   Route,
   Trophy,
   Fuel,
+  History,
   type LucideIcon,
 } from "lucide-react";
 
@@ -32,6 +34,8 @@ export default async function Dashboard() {
     getGastos().catch(() => []),
     getMantenimientos().catch(() => []),
   ]);
+
+  const recuerdos = recuerdosDeHoy(viajes);
 
   // Avisos de mantenimiento (vencidos o próximos) de todas las motos
   const avisos = motos.flatMap((m) =>
@@ -156,6 +160,32 @@ export default async function Dashboard() {
           <Stat icono={Camera} label={videos ? "Fotos · videos" : "Fotos"} valor={videos ? `${num(fotos)} · ${num(videos)}` : num(fotos)} />
         </div>
       </section>
+
+      {recuerdos.length > 0 && (
+        <section className="space-y-3">
+          {recuerdos.map((r) => (
+            <Link
+              key={r.viaje.id}
+              href={`/viajes/${r.viaje.id}`}
+              className="card group block space-y-3 border-naranja/30 p-4 transition hover:border-naranja/60"
+            >
+              <p className="flex items-center gap-2 text-sm text-niebla">
+                <History className="size-4 text-naranja" />
+                {r.anios === 1 ? "Hace un año" : `Hace ${r.anios} años`}, por estos días…
+              </p>
+              <p className="font-display text-2xl font-bold uppercase group-hover:text-naranja">{r.viaje.titulo}</p>
+              {r.fotos.length > 0 && (
+                <div className="grid grid-cols-4 gap-1.5">
+                  {r.fotos.map((f) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={f.id} src={cldMiniatura(f, { w: 300, h: 300, crop: "fill" })} alt="" className="aspect-square w-full rounded-lg object-cover" loading="lazy" />
+                  ))}
+                </div>
+              )}
+            </Link>
+          ))}
+        </section>
+      )}
 
       {enMapa.length > 0 && (
         <section className="space-y-4">

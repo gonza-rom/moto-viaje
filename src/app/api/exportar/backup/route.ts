@@ -5,7 +5,7 @@ import { db } from "@/lib/supabase";
 // Protegido por el middleware (requiere sesión).
 
 export async function GET() {
-  const tablas = ["motos", "viajes", "fotos", "gastos", "mantenimientos"] as const;
+  const tablas = ["motos", "viajes", "fotos", "gastos", "mantenimientos", "planes"] as const;
   const out: Record<string, unknown> = {
     app: "moto-viajes",
     version: 1,

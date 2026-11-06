@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { CircleAlert, Fuel, LoaderCircle, MapPinned, Route, Search, TriangleAlert, Wallet } from "lucide-react";
+import { CircleAlert, Fuel, LoaderCircle, MapPinned, MountainSnow, Route, Save, Search, Snowflake, TriangleAlert, Wallet } from "lucide-react";
 import { EditorRutaLazy, MapaRutaLazy } from "./mapas";
 import { guardarBorrador, leerBorrador } from "@/lib/offline";
 import { kmAcumulados, reducir, ubicarEnRecorrido } from "@/lib/recorrido";
@@ -10,6 +11,11 @@ import { plata } from "@/lib/gastos";
 import { km as fmtKm, num } from "@/lib/format";
 import type { Ruta } from "@/lib/ruta";
 import type { Punto } from "@/lib/gpx";
+import type { Plan } from "@/lib/types";
+import { guardarPlan } from "@/app/acciones-extra";
+import type { Altimetria as DatosAltura } from "@/lib/types";
+
+const Altimetria = dynamic(() => import("./Altimetria"), { ssr: false });
 
 export type MotoPlan = { id: string; nombre: string; tanque: number | null; consumo: number | null };
 
@@ -97,18 +103,31 @@ async function buscarEstaciones(trazo: Punto[], signal: AbortSignal): Promise<Es
   throw ultimoError instanceof Error ? ultimoError : new Error("No se pudieron buscar las estaciones");
 }
 
-export function Planificador({ motos, precio: precioInicial }: { motos: MotoPlan[]; precio: number | null }) {
+export function Planificador({ motos, precio: precioInicial, plan }: { motos: MotoPlan[]; precio: number | null; plan?: Plan | null }) {
   const router = useRouter();
-  const [ruta, setRuta] = useState<Ruta | null>(null);
+  const [ruta, setRuta] = useState<Ruta | null>(plan?.ruta ?? null);
+  const [planId, setPlanId] = useState<string | null>(plan?.id ?? null);
+  const [nombre, setNombre] = useState(plan?.nombre ?? "");
+  const [guardando, setGuardando] = useState(false);
+  const [msjPlan, setMsjPlan] = useState("");
   const [motoId, setMotoId] = useState(motos[0]?.id ?? "");
   const moto = motos.find((m) => m.id === motoId);
-  const [consumoTxt, setConsumoTxt] = useState(moto?.consumo ? String(Math.round(moto.consumo * 10) / 10).replace(".", ",") : "");
-  const [tanqueTxt, setTanqueTxt] = useState(moto?.tanque ? String(moto.tanque).replace(".", ",") : "");
-  const [precioTxt, setPrecioTxt] = useState(precioInicial ? String(precioInicial) : "");
-  const [reserva, setReserva] = useState(15);
+  const coma = (n: number | null | undefined) => (n ? String(Math.round(n * 10) / 10).replace(".", ",") : "");
+  const [consumoTxt, setConsumoTxt] = useState(coma(plan?.consumo ?? moto?.consumo));
+  const [tanqueTxt, setTanqueTxt] = useState(coma(plan?.tanque ?? moto?.tanque));
+  const [precioTxt, setPrecioTxt] = useState(plan?.precio ? String(Math.round(plan.precio)) : precioInicial ? String(precioInicial) : "");
+  const [reserva, setReserva] = useState(plan?.reserva ?? 15);
   const [estaciones, setEstaciones] = useState<Estacion[] | null>(null);
   const [buscando, setBuscando] = useState(false);
   const [error, setError] = useState("");
+  // Altura: se calcula cuando la ruta deja de cambiar (cada cambio en el mapa remonta el gráfico)
+  const [rutaAltura, setRutaAltura] = useState<Ruta | null>(null);
+  const [altura, setAltura] = useState<DatosAltura | null>(null);
+  useEffect(() => {
+    setAltura(null);
+    const t = setTimeout(() => setRutaAltura(ruta && ruta.trazo.length > 1 ? ruta : null), 1500);
+    return () => clearTimeout(t);
+  }, [ruta]);
 
   function elegirMoto(id: string) {
     setMotoId(id);
@@ -161,6 +180,22 @@ export function Planificador({ motos, precio: precioInicial }: { motos: MotoPlan
     }
   }
 
+  async function guardar(e: React.FormEvent) {
+    e.preventDefault();
+    if (!ruta) return;
+    setGuardando(true);
+    setMsjPlan("");
+    const r = await guardarPlan(planId, { nombre, ruta, consumo, tanque, precio, reserva, litros, costo }).catch(() => ({
+      error: "Sin conexión",
+    }));
+    setGuardando(false);
+    if (r.error || !("id" in r) || !r.id) return setMsjPlan(r.error ?? "No se pudo guardar");
+    setMsjPlan(planId ? "Cambios guardados" : "Plan guardado");
+    // URL del plan sin recargar (el componente se remonta al cambiar de plan desde la lista)
+    if (!planId) window.history.replaceState(null, "", `/planificar?plan=${r.id}`);
+    setPlanId(r.id);
+  }
+
   function crearViaje() {
     if (!ruta) return;
     const previo = leerBorrador("mv:borrador:nuevo");
@@ -168,6 +203,7 @@ export function Planificador({ motos, precio: precioInicial }: { motos: MotoPlan
     const p = ruta.paradas;
     guardarBorrador("mv:borrador:nuevo", {
       desdePlan: true,
+      planId,
       titulo: "",
       moto_id: motoId,
       notas: "",
@@ -194,7 +230,7 @@ export function Planificador({ motos, precio: precioInicial }: { motos: MotoPlan
           <Route className="size-3.5" /> 1 · La ruta
         </h2>
         <EditorRutaLazy
-          inicial={null}
+          inicial={plan?.ruta ?? null}
           origen=""
           destino=""
           onChange={(r) => {
@@ -253,6 +289,25 @@ export function Planificador({ motos, precio: precioInicial }: { motos: MotoPlan
         </p>
       </section>
 
+      {rutaAltura && (
+        <section className="card space-y-3 p-4">
+          <h2 className="label flex items-center gap-1.5">
+            <MountainSnow className="size-3.5" /> Altura del recorrido
+          </h2>
+          <Altimetria key={`${rutaAltura.km}-${rutaAltura.trazo.length}`} inicial={null} trazo={rutaAltura.trazo} onDatos={setAltura} />
+          {altura && altura.max >= 3000 && (
+            <p className="flex items-start gap-2 rounded-xl border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-sm text-sky-100">
+              <Snowflake className="mt-0.5 size-4 shrink-0" />
+              <span>
+                La ruta llega a <b>{num(altura.max)} m</b>. Arriba de 3.000 m hace frío aun en verano (llevá abrigo y guantes de invierno),
+                puede haber viento blanco o nieve, y la moto pierde potencia (≈10 % menos cada 1.000 m) y puede gastar más nafta.
+                {altura.max >= 4000 && " Por encima de 4.000 m también cuidate del apunamiento: subí despacio y tomá agua."}
+              </span>
+            </p>
+          )}
+        </section>
+      )}
+
       {km > 0 && (
         <section className="card space-y-4 p-4">
           <h2 className="label flex items-center gap-1.5">
@@ -275,6 +330,27 @@ export function Planificador({ motos, precio: precioInicial }: { motos: MotoPlan
               <MapPinned className="size-4" /> Crear viaje con esta ruta
             </button>
           </div>
+
+          {/* Guardar el plan (para hacerlo más adelante y comparar con lo real) */}
+          <form onSubmit={guardar} className="flex flex-wrap items-center gap-2 border-t border-linea pt-4">
+            <input
+              value={nombre}
+              onChange={(e) => (setNombre(e.target.value), setMsjPlan(""))}
+              maxLength={120}
+              placeholder="Nombre del plan (ej: Ruta 40 en enero)"
+              aria-label="Nombre del plan"
+              className="input min-w-0 flex-1"
+            />
+            <button disabled={guardando || !nombre.trim()} className="btn-ghost disabled:opacity-50">
+              <Save className="size-4" /> {guardando ? "Guardando…" : planId ? "Guardar cambios" : "Guardar plan"}
+            </button>
+            <p className="w-full text-xs text-niebla">
+              {msjPlan ||
+                (planId
+                  ? "Si creás el viaje desde este plan, después vas a ver lo planeado contra lo real."
+                  : "Guardalo para hacerlo más adelante y, cuando hagas el viaje, comparar lo planeado con lo real.")}
+            </p>
+          </form>
           {error && (
             <p className="flex items-center gap-1.5 text-sm text-red-400">
               <CircleAlert className="size-4" /> {error}

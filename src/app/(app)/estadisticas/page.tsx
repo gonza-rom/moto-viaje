@@ -18,6 +18,8 @@ import {
 import { getGastos, getMantenimientos, getViajes } from "@/lib/queries";
 import { dias, km, num, rangoFechas } from "@/lib/format";
 import { labelGasto, plata, resumirGastos } from "@/lib/gastos";
+import { MapaProvincias } from "@/components/MapaProvincias";
+import { BotonTarjeta } from "@/components/BotonTarjeta";
 import type { ViajeConRelaciones } from "@/lib/types";
 
 export const metadata = { title: "Estadísticas" };
@@ -99,9 +101,18 @@ export default async function Estadisticas() {
     <div className="space-y-10">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="font-display text-5xl font-bold uppercase">Estadísticas</h1>
-        <a href="/api/exportar/backup" download className="btn-ghost py-2" title="Todos tus datos en un archivo JSON">
-          <DatabaseBackup className="size-4" /> Copia de seguridad
-        </a>
+        <div className="flex flex-wrap gap-2">
+          {anios.length > 0 && (
+            <BotonTarjeta
+              titulo="Mi año en moto"
+              etiqueta="Mi año en moto"
+              variantes={[...anios].reverse().map(([a]) => ({ label: a, base: "/api/tarjeta/anio/" + a }))}
+            />
+          )}
+          <a href="/api/exportar/backup" download className="btn-ghost py-2" title="Todos tus datos en un archivo JSON">
+            <DatabaseBackup className="size-4" /> Copia de seguridad
+          </a>
+        </div>
       </div>
 
       {/* Año a año */}
@@ -201,6 +212,7 @@ export default async function Estadisticas() {
                   </div>
                 </div>
               ))}
+              <MapaProvincias visitadas={[...(lugares.get("Argentina")?.keys() ?? []), ...(lugares.get("—")?.keys() ?? [])]} />
             </>
           ) : (
             <p className="text-sm text-niebla">

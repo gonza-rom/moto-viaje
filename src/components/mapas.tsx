@@ -17,3 +17,4 @@ function Cargando() {
 export const MapaRutaLazy = dynamic(() => import("./MapaRuta"), { ssr: false, loading: Cargando });
 export const EditorRutaLazy = dynamic(() => import("./EditorRuta"), { ssr: false, loading: Cargando });
 export const MapaViajesLazy = dynamic(() => import("./MapaViajes"), { ssr: false, loading: Cargando });
+export const RepeticionLazy = dynamic(() => import("./Repeticion"), { ssr: false, loading: Cargando });

@@ -33,6 +33,8 @@ export type Foto = {
   lugar: string | null;
   provincia: string | null;
   pais: string | null;
+  /** Nombre de quien la subió desde el álbum compartido (null = el dueño) */
+  subida_por?: string | null;
 };
 
 /** Foto con datos de su viaje (galería general) */
@@ -61,6 +63,8 @@ export type Viaje = {
   diario: Record<string, string> | null;
   etiquetas: string[];
   altimetria: Altimetria | null;
+  /** Token del álbum compartido (acompañantes suben fotos sin contraseña) */
+  album_token?: string | null;
   /** Localidades por las que pasa el recorrido (null = falta buscarlas) */
   lugares: LugarRecorrido[] | null;
   created_at: string;
@@ -127,4 +131,20 @@ export type FotoDraft = {
   lng: number | null;
   favorita: boolean;
   categoria: Categoria | null;
+};
+
+/** Ruta guardada desde el planificador */
+export type Plan = {
+  id: string;
+  nombre: string;
+  ruta: Ruta;
+  km: number;
+  consumo: number | null;
+  tanque: number | null;
+  precio: number | null;
+  reserva: number;
+  litros: number | null;
+  costo: number | null;
+  viaje_id: string | null;
+  created_at: string;
 };
