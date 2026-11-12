@@ -153,20 +153,13 @@ export function Galeria({
   // Orden de navegación del visor = orden en pantalla
   const lista = useMemo(() => grupos.flatMap((g) => g.items), [grupos]);
 
-  // Con cientos de fotos: mostrar de a tandas (el visor igual recorre todas)
-  const TANDA = 48;
-  const [limite, setLimite] = useState(TANDA);
-  useEffect(() => setLimite(TANDA), [filtro, modo]);
-  const gruposVisibles = useMemo(() => {
-    let resto = limite;
-    const out: Grupo<Item>[] = [];
-    for (const g of grupos) {
-      if (resto <= 0) break;
-      out.push({ ...g, items: g.items.slice(0, resto) });
-      resto -= g.items.length;
-    }
-    return out;
-  }, [grupos, limite]);
+  // Con cientos de fotos: unas pocas por día (o por grupo) y "Ver más" en cada uno.
+  // El visor igual recorre todas.
+  const POR_GRUPO = grupos.length > 1 ? 8 : 24;
+  const MAS = 40;
+  const [mostrar, setMostrar] = useState<Record<string, number>>({});
+  useEffect(() => setMostrar({}), [filtro, modo]);
+  const cuantas = (clave: string) => mostrar[clave] ?? POR_GRUPO;
   const idx = abierta ? lista.findIndex((f) => f.id === abierta) : -1;
   const actual = idx >= 0 ? lista[idx] : null;
 
@@ -312,7 +305,7 @@ export function Galeria({
 
       {!lista.length && <p className="py-6 text-center text-sm text-niebla">No hay nada con ese filtro.</p>}
 
-      {gruposVisibles.map((g) => (
+      {grupos.map((g) => (
         <section key={g.clave} className="space-y-3">
           {g.titulo && (
             <div className="flex items-baseline gap-2 border-b border-linea pb-1.5">
@@ -341,7 +334,7 @@ export function Galeria({
             <p className="border-l-2 border-naranja/60 pl-3 text-sm leading-relaxed whitespace-pre-line text-white/85">{diario[g.clave]}</p>
           )}
           <div className="columns-2 gap-2 sm:columns-3 lg:columns-4">
-            {g.items.map((f) => (
+            {g.items.slice(0, cuantas(g.clave)).map((f) => (
               <button
                 key={f.id}
                 onClick={() => (seleccion ? alternarSel([f.id]) : setAbierta(f.id))}
@@ -398,14 +391,26 @@ export function Galeria({
               </button>
             ))}
           </div>
+          {(g.items.length > cuantas(g.clave) || cuantas(g.clave) > POR_GRUPO) && (
+            <div className="flex gap-2">
+              {g.items.length > cuantas(g.clave) && (
+                <button
+                  type="button"
+                  onClick={() => setMostrar((m) => ({ ...m, [g.clave]: cuantas(g.clave) + MAS }))}
+                  className="btn-ghost flex-1 py-2 text-sm"
+                >
+                  Ver más fotos{/^Día/i.test(g.titulo) ? ` del ${g.titulo.toLowerCase()}` : ""} ({g.items.length - cuantas(g.clave)} más)
+                </button>
+              )}
+              {cuantas(g.clave) > POR_GRUPO && (
+                <button type="button" onClick={() => setMostrar((m) => ({ ...m, [g.clave]: POR_GRUPO }))} className="btn-ghost py-2 text-sm">
+                  Ver menos
+                </button>
+              )}
+            </div>
+          )}
         </section>
       ))}
-
-      {lista.length > limite && (
-        <button type="button" onClick={() => setLimite((l) => l + TANDA * 2)} className="btn-ghost w-full py-3">
-          Ver más fotos ({lista.length - limite} más)
-        </button>
-      )}
 
       {seleccion && (
         <BarraSeleccion
