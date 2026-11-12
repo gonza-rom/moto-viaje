@@ -9,6 +9,7 @@ import {
   ChevronRight,
   FileUp,
   Gauge,
+  FolderOpen,
   ImagePlus,
   LoaderCircle,
   MapPinned,
@@ -166,6 +167,8 @@ export function ViajeForm({
   const [subidas, setSubidas] = useState<Subida[]>([]);
   const [drag, setDrag] = useState(false);
   const inputFotos = useRef<HTMLInputElement>(null);
+  // Selector de archivos genérico (gestor de Archivos): sin el tope de 100 de la galería de Android
+  const inputArchivos = useRef<HTMLInputElement>(null);
   // Fotos de a páginas: con cientos de fotos, mostrarlas todas juntas hacía la página larguísima y pesada
   const [paginaFotos, setPaginaFotos] = useState(0);
   const [eligiendoPortada, setEligiendoPortada] = useState(false);
@@ -912,9 +915,24 @@ export function ViajeForm({
           />
         </div>
 
+        {/* La galería de Android deja elegir hasta 100 fotos por vez; el gestor de Archivos no tiene límite */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => inputArchivos.current?.click()} className="btn-ghost py-2 text-sm">
+            <FolderOpen className="size-4" /> Elegir desde Archivos (sin límite)
+          </button>
+          <span className="text-xs text-niebla">La galería del celular deja elegir hasta 100 por vez.</span>
+          <input
+            ref={inputArchivos}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => { if (e.target.files) agregarFotos(e.target.files); e.target.value = ""; }}
+          />
+        </div>
+
         <p className="text-xs text-niebla">
-          En Android el navegador no puede leer la ubicación de las fotos (el sistema la oculta). Después de guardar, asignales el
-          lugar desde <b>Pasaste por</b> en el viaje.
+          En Android el navegador no puede leer la ubicación de las fotos (el sistema la oculta, también desde Archivos). Después de
+          guardar, asignales el lugar desde <b>Pasaste por</b> en el viaje.
         </p>
 
         {/* Subidas en curso: un resumen (con cientos de fotos, una tarjeta por foto trababa el celular) */}
