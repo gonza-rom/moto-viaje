@@ -15,7 +15,19 @@ const horaAR = (iso: string | null) =>
 const fechaAR = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(iso));
 
 export function JornadaForm({ jornada, motos }: { jornada?: Jornada; motos: Pick<Moto, "id" | "nombre">[] }) {
-  const [estado, enviar, pendiente] = useActionState(guardarJornada.bind(null, jornada?.id ?? null), undefined);
+  // Errores de red o de versión (se publicó una versión nueva con el formulario abierto): mensaje, no pantalla rota
+  const accion = guardarJornada.bind(null, jornada?.id ?? null);
+  const [estado, enviar, pendiente] = useActionState(async (prev: Awaited<ReturnType<typeof accion>>, fd: FormData) => {
+    try {
+      return await accion(prev, fd);
+    } catch (e) {
+      const msj = (e as Error)?.message ?? "";
+      if (!navigator.onLine || e instanceof TypeError) return { error: "Sin señal: no se pudo guardar. Probá cuando vuelva la señal." };
+      if (/server action|older or newer deployment|failed to find|unexpected response/i.test(msj))
+        return { error: "La app se actualizó mientras cargabas la jornada: recargá la página y volvé a guardar." };
+      return { error: `No se pudo guardar (${msj || "error inesperado"}).` };
+    }
+  }, undefined);
   const hoy = fechaAR(new Date().toISOString());
   const [fecha, setFecha] = useState(jornada?.fecha ?? hoy);
   const [horaIni, setHoraIni] = useState(horaAR(jornada?.inicio ?? null));

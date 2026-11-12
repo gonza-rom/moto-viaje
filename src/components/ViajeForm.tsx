@@ -423,7 +423,16 @@ export function ViajeForm({
       if (!navigator.onLine || e instanceof TypeError) {
         return { error: "Sin señal: no se pudo guardar. Todo quedó guardado en el celular; tocá Guardar cuando vuelva la señal." };
       }
-      throw e;
+      // Se publicó una versión nueva de la app mientras el formulario estaba abierto: el botón
+      // Guardar apunta a la versión vieja. Se guarda todo en el celular, se recarga y se recupera solo.
+      const msj = (e as Error)?.message ?? "";
+      if (/server action|older or newer deployment|failed to find|unexpected response/i.test(msj)) {
+        guardarBorrador(claveBorrador, { ...datosBorrador(), porActualizacion: true });
+        window.location.reload();
+        return new Promise<Estado>(() => {}); // queda en "Guardando…" hasta que recarga
+      }
+      guardarBorrador(claveBorrador, datosBorrador());
+      return { error: `No se pudo guardar (${msj || "error inesperado"}). Todo quedó guardado en el celular: probá de nuevo.` };
     }
   };
   const [estado, enviar, pendiente] = useActionState(accionSegura, undefined);
@@ -488,6 +497,7 @@ export function ViajeForm({
   borradorPrevioRef.current = borradorPrevio;
   const [enLinea, setEnLinea] = useState(true);
   const [avisoSinSenal, setAvisoSinSenal] = useState(false);
+  const [avisoActualizacion, setAvisoActualizacion] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
   const [rutaEditor, setRutaEditor] = useState<Ruta | null>(viaje?.ruta ?? null);
 
@@ -495,6 +505,11 @@ export function ViajeForm({
     const previo = leerBorrador(claveBorrador);
     // Viene del planificador: cargar la ruta planeada directamente
     if (previo?.desdePlan) setAutoRecuperar(true);
+    // Se recargó porque salió una versión nueva de la app al guardar: recuperar sin preguntar
+    if (previo?.porActualizacion) {
+      setAutoRecuperar(true);
+      setAvisoActualizacion(true);
+    }
     if (previo) setBorradorPrevio(previo);
     else retomarPendientes();
     setEnLinea(navigator.onLine);
@@ -614,6 +629,15 @@ export function ViajeForm({
       ref={formRef}
       className="space-y-8"
     >
+      {avisoActualizacion && (
+        <div role="status" className="flex items-start gap-3 rounded-xl border border-sky-400/40 bg-sky-400/10 p-4 text-sm text-sky-100">
+          <History className="mt-0.5 size-5 shrink-0" />
+          <p>
+            La app se actualizó mientras cargabas el viaje. <b>Recuperamos todo</b> (fotos incluidas): revisá y tocá <b>Guardar</b>.
+          </p>
+        </div>
+      )}
+
       {borradorPrevio && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-naranja/40 bg-naranja/10 p-4 text-sm">
           <History className="size-5 shrink-0 text-naranja" />
