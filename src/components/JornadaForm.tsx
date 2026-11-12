@@ -17,7 +17,7 @@ const fechaAR = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "A
 export function JornadaForm({ jornada, motos }: { jornada?: Jornada; motos: Pick<Moto, "id" | "nombre">[] }) {
   // Errores de red o de versión (se publicó una versión nueva con el formulario abierto): mensaje, no pantalla rota
   const accion = guardarJornada.bind(null, jornada?.id ?? null);
-  const [estado, enviar, pendiente] = useActionState(async (prev: Awaited<ReturnType<typeof accion>>, fd: FormData) => {
+  const [estado, enviar, pendiente] = useActionState(async (prev: Awaited<ReturnType<typeof accion>> | undefined, fd: FormData) => {
     try {
       return await accion(prev, fd);
     } catch (e) {
