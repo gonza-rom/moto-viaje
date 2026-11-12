@@ -1,4 +1,4 @@
-import { getGastos, getMantenimientos, getMotos, getViajes } from "@/lib/queries";
+import { getGastos, getJornadas, getMantenimientos, getMotos, getViajes } from "@/lib/queries";
 import { actualizarMoto, crearMoto, eliminarMoto } from "@/app/actions";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { MotoForm } from "@/components/MotoForm";
@@ -14,7 +14,13 @@ export const metadata = { title: "Motos" };
 const nf = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 
 export default async function MotosPage() {
-  const [motos, viajes, gastos, mants] = await Promise.all([getMotos(), getViajes(), getGastos(), getMantenimientos()]);
+  const [motos, viajes, gastos, mants, jornadas] = await Promise.all([
+    getMotos(),
+    getViajes(),
+    getGastos(),
+    getMantenimientos(),
+    getJornadas({ sinRecorrido: true }).catch(() => []),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
@@ -24,7 +30,7 @@ export default async function MotosPage() {
         {motos.map((m) => {
           const suyos = viajes.filter((v) => v.moto_id === m.id);
           const kmViajes = suyos.reduce((a, v) => a + v.km, 0);
-          const odo = odometroActual(m, viajes, gastos, mants);
+          const odo = odometroActual(m, viajes, gastos, mants, jornadas);
           const cargas = gastos.filter((g) => g.moto_id === m.id && g.tipo === "nafta");
           const consumo = consumoTanqueLleno(cargas);
           const susMants = mants.filter((x) => x.moto_id === m.id);

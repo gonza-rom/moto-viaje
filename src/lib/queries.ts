@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./supabase";
-import type { FotoConViaje, Gasto, Mantenimiento, Moto, Plan, ViajeConRelaciones } from "./types";
+import type { FotoConViaje, Gasto, Jornada, Mantenimiento, Moto, Plan, ViajeConRelaciones } from "./types";
 
 const SELECT_VIAJE = "*, motos(id, nombre), fotos(*)";
 
@@ -48,9 +48,10 @@ export async function getMotos(): Promise<Moto[]> {
 }
 
 /** Gastos: de un viaje, de una moto, o todos (más nuevos primero) */
-export async function getGastos(f: { viajeId?: string } = {}): Promise<Gasto[]> {
+export async function getGastos(f: { viajeId?: string; jornadaId?: string } = {}): Promise<Gasto[]> {
   let q = db().from("gastos").select("*").order("fecha", { ascending: false }).order("created_at", { ascending: false });
   if (f.viajeId) q = q.eq("viaje_id", f.viajeId);
+  if (f.jornadaId) q = q.eq("jornada_id", f.jornadaId);
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   return (data as Gasto[]).map((g) => ({ ...g, monto: Number(g.monto), litros: g.litros === null ? null : Number(g.litros) }));
@@ -116,4 +117,28 @@ export async function getPlanDeViaje(viajeId: string): Promise<Plan | null> {
   if (error || !data?.[0]) return null;
   const p = data[0] as Plan;
   return { ...p, km: Number(p.km), litros: p.litros === null ? null : Number(p.litros), costo: p.costo === null ? null : Number(p.costo) };
+}
+
+const numJornada = (j: Jornada): Jornada => ({
+  ...j,
+  km: Number(j.km),
+  ingresos: j.ingresos === null ? null : Number(j.ingresos),
+  propinas: j.propinas === null ? null : Number(j.propinas),
+});
+
+/** Jornadas de trabajo, la más nueva primero. sinRecorrido: no trae los puntos (listados) */
+export async function getJornadas(o: { sinRecorrido?: boolean } = {}): Promise<Jornada[]> {
+  const cols = o.sinRecorrido
+    ? "id, moto_id, fecha, inicio, fin, km, minutos_total, minutos_movimiento, ingresos, propinas, viajes, notas, created_at"
+    : "*";
+  const { data, error } = await db().from("jornadas").select(cols).order("fecha", { ascending: false }).order("inicio", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data as unknown as Jornada[]).map((j) => numJornada({ ...j, recorrido: j.recorrido ?? null }));
+}
+
+export async function getJornada(id: string): Promise<Jornada | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const { data, error } = await db().from("jornadas").select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? numJornada(data as Jornada) : null;
 }

@@ -5,6 +5,7 @@
 
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { db } from "@/lib/supabase";
 import { limpiarNombreLugar, parseRuta } from "@/lib/ruta";
 import { requerirSesion } from "@/lib/sesion";
@@ -54,10 +55,15 @@ export async function crearGasto(_prev: Estado, fd: FormData): Promise<Estado & 
     const litros = tipo === "nafta" ? num(fd, "litros") : null;
     if (monto === null && litros === null) throw new Error("Poné el monto (o los litros, si es nafta)");
     const viaje_id = uuid(fd, "viaje_id");
+    const jornada_id = uuid(fd, "jornada_id");
     let moto_id = uuid(fd, "moto_id");
-    // Si es de un viaje y no se eligió moto, usar la del viaje
+    // Si es de un viaje o una jornada y no se eligió moto, usar la de ese viaje/jornada
     if (viaje_id && !moto_id) {
       const { data } = await db().from("viajes").select("moto_id").eq("id", viaje_id).single();
+      moto_id = data?.moto_id ?? null;
+    }
+    if (jornada_id && !moto_id) {
+      const { data } = await db().from("jornadas").select("moto_id").eq("id", jornada_id).single();
       moto_id = data?.moto_id ?? null;
     }
     const odo = num(fd, "odometro");
@@ -65,6 +71,7 @@ export async function crearGasto(_prev: Estado, fd: FormData): Promise<Estado & 
       .from("gastos")
       .insert({
         viaje_id,
+        ...(jornada_id ? { jornada_id } : {}),
         moto_id,
         fecha: fecha(fd, "fecha"),
         tipo,
@@ -377,4 +384,88 @@ export async function albumViaje(id: string, activar: boolean): Promise<{ token:
   const { error } = await db().from("viajes").update({ album_token: token }).eq("id", id);
   if (error) return { token: null, error: error.message };
   return { token };
+}
+
+/* ───────────── Jornadas de trabajo ───────────── */
+
+/** Crea o actualiza una jornada (formulario). Devuelve adónde ir después de guardar. */
+export async function guardarJornada(id: string | null, _prev: Estado, fd: FormData): Promise<Estado & { ir?: string }> {
+  await requerirSesion();
+  try {
+    if (id && !UUID.test(id)) throw new Error("Jornada inválida");
+    const dia = fecha(fd, "fecha");
+    // Horario: "HH:MM" del día (hora de Argentina); si termina después de medianoche, al día siguiente
+    const hora = (k: string) => {
+      const v = txt(fd, k, 5);
+      return v && /^\d{2}:\d{2}$/.test(v) ? v : null;
+    };
+    const hi = hora("hora_inicio");
+    const hf = hora("hora_fin");
+    const aIso = (h: string, sumarDia = false) => {
+      const d = new Date(`${dia}T${h}:00-03:00`);
+      if (sumarDia) d.setUTCDate(d.getUTCDate() + 1);
+      return d.toISOString();
+    };
+    let inicio = hi ? aIso(hi) : null;
+    let fin = hf ? aIso(hf, !!hi && hf < hi) : null;
+    let minutos_total = inicio && fin ? Math.round((Date.parse(fin) - Date.parse(inicio)) / 60000) : null;
+    let minutos_movimiento: number | null = null;
+    let km = num(fd, "km") ?? 0;
+
+    // Recorrido importado (GPX) o grabado: manda sobre lo cargado a mano si trae datos
+    let recorrido: [number, number][] | null | undefined;
+    const rec = txt(fd, "recorrido", 400000);
+    if (rec) {
+      const r = JSON.parse(rec) as { km?: number; inicio?: string; fin?: string; minutosTotal?: number; minutosMovimiento?: number; recorrido?: unknown };
+      const ok = (n: unknown) => typeof n === "number" && Number.isFinite(n);
+      recorrido = Array.isArray(r.recorrido)
+        ? (r.recorrido as unknown[])
+            .filter((p): p is [number, number] => Array.isArray(p) && ok(p[0]) && ok(p[1]) && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180)
+            .slice(0, 5000)
+        : null;
+      if (ok(r.km) && !num(fd, "km")) km = r.km!;
+      if (r.inicio && !hi) inicio = r.inicio;
+      if (r.fin && !hf) fin = r.fin;
+      if (ok(r.minutosTotal) && !(hi && hf)) minutos_total = Math.round(r.minutosTotal!);
+      if (ok(r.minutosMovimiento)) minutos_movimiento = Math.round(r.minutosMovimiento!);
+    } else if (fd.get("quitar_recorrido") === "1") recorrido = null;
+
+    const ent = (k: string) => {
+      const n = num(fd, k);
+      return n === null ? null : Math.round(n);
+    };
+    const fila = {
+      fecha: dia,
+      moto_id: uuid(fd, "moto_id"),
+      inicio,
+      fin,
+      km: Math.round(Math.max(0, km) * 10) / 10,
+      minutos_total: minutos_total !== null && minutos_total >= 0 && minutos_total < 48 * 60 ? minutos_total : null,
+      minutos_movimiento,
+      ingresos: num(fd, "ingresos"),
+      propinas: num(fd, "propinas"),
+      viajes: ent("viajes"),
+      notas: txt(fd, "notas", 1000),
+      ...(recorrido !== undefined ? { recorrido } : {}),
+    };
+    if (id) {
+      const { error } = await db().from("jornadas").update(fila).eq("id", id);
+      if (error) throw error;
+      revalidatePath("/jornadas");
+      return { ok: "Guardado", ir: `/jornadas/${id}` };
+    }
+    const { data, error } = await db().from("jornadas").insert(fila).select("id").single();
+    if (error) throw error;
+    revalidatePath("/jornadas");
+    return { ok: "Guardado", ir: `/jornadas/${data.id}` };
+  } catch (e) {
+    return { error: (e as Error).message || "No se pudo guardar la jornada" };
+  }
+}
+
+export async function borrarJornada(id: string) {
+  await requerirSesion();
+  if (UUID.test(id)) await db().from("jornadas").delete().eq("id", id);
+  revalidatePath("/jornadas");
+  redirect("/jornadas");
 }

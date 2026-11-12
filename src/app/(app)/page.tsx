@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getGastos, getMantenimientos, getMotos, getViajes } from "@/lib/queries";
+import { getGastos, getJornadas, getMantenimientos, getMotos, getViajes } from "@/lib/queries";
 import { estadosMantenimiento, odometroActual, textoFalta } from "@/lib/mantenimiento";
 import { TriangleAlert } from "lucide-react";
 import { ViajeCard } from "@/components/ViajeCard";
@@ -28,11 +28,12 @@ import {
 const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
 export default async function Dashboard() {
-  const [viajes, motos, gastos, mants] = await Promise.all([
+  const [viajes, motos, gastos, mants, jornadas] = await Promise.all([
     getViajes(),
     getMotos(),
     getGastos().catch(() => []),
     getMantenimientos().catch(() => []),
+    getJornadas({ sinRecorrido: true }).catch(() => []),
   ]);
 
   const recuerdos = recuerdosDeHoy(viajes);
@@ -41,7 +42,7 @@ export default async function Dashboard() {
   const avisos = motos.flatMap((m) =>
     estadosMantenimiento(
       mants.filter((x) => x.moto_id === m.id),
-      odometroActual(m, viajes, gastos, mants)
+      odometroActual(m, viajes, gastos, mants, jornadas)
     )
       .filter((e) => e.estado === "vencido" || e.estado === "pronto")
       .map((e) => ({ ...e, moto: m.nombre }))

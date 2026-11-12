@@ -18,3 +18,4 @@ export const MapaRutaLazy = dynamic(() => import("./MapaRuta"), { ssr: false, lo
 export const EditorRutaLazy = dynamic(() => import("./EditorRuta"), { ssr: false, loading: Cargando });
 export const MapaViajesLazy = dynamic(() => import("./MapaViajes"), { ssr: false, loading: Cargando });
 export const RepeticionLazy = dynamic(() => import("./Repeticion"), { ssr: false, loading: Cargando });
+export const MapaZonasLazy = dynamic(() => import("./MapaZonas"), { ssr: false, loading: Cargando });

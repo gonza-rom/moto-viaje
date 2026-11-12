@@ -96,6 +96,8 @@ export type TipoGasto = "nafta" | "peaje" | "comida" | "alojamiento" | "repuesto
 export type Gasto = {
   id: string;
   viaje_id: string | null;
+  /** Jornada de trabajo a la que pertenece (null = de un viaje o suelto) */
+  jornada_id?: string | null;
   moto_id: string | null;
   fecha: string;
   tipo: TipoGasto;
@@ -155,5 +157,23 @@ export type Plan = {
   litros: number | null;
   costo: number | null;
   viaje_id: string | null;
+  created_at: string;
+};
+
+/** Jornada de trabajo (Uber): km, tiempo, lo que se ganó y el recorrido */
+export type Jornada = {
+  id: string;
+  moto_id: string | null;
+  fecha: string;
+  inicio: string | null;
+  fin: string | null;
+  km: number;
+  minutos_total: number | null;
+  minutos_movimiento: number | null;
+  ingresos: number | null;
+  propinas: number | null;
+  viajes: number | null;
+  recorrido: [number, number][] | null;
+  notas: string | null;
   created_at: string;
 };

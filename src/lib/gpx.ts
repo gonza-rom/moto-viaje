@@ -26,3 +26,22 @@ export function distanciaKm(puntos: Punto[]): number {
   for (let i = 1; i < puntos.length; i++) total += haversine(puntos[i - 1], puntos[i]);
   return Math.round(total * 10) / 10;
 }
+
+/** Punto de un track con la hora en que se registró (ms, o null si el GPX no la tiene) */
+export type PuntoT = { p: Punto; t: number | null };
+
+/** Parsea GPX conservando la hora de cada punto. Solo navegador. */
+export function parseGpxConTiempo(xml: string): PuntoT[] {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  let nodes = Array.from(doc.getElementsByTagName("trkpt"));
+  if (!nodes.length) nodes = Array.from(doc.getElementsByTagName("rtept"));
+  return nodes
+    .map((n) => {
+      const lat = parseFloat(n.getAttribute("lat") || "");
+      const lon = parseFloat(n.getAttribute("lon") || "");
+      const tt = n.getElementsByTagName("time")[0]?.textContent;
+      const t = tt ? Date.parse(tt) : NaN;
+      return { p: [lat, lon] as Punto, t: Number.isFinite(t) ? t : null };
+    })
+    .filter(({ p }) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+}

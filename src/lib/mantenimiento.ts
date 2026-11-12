@@ -19,20 +19,22 @@ export const labelMant = (t: string) => TIPOS_MANT.find((x) => x.valor === t)?.l
 
 /**
  * Odómetro actual estimado de una moto: el mayor dato conocido entre
- * odómetro de llegada de viajes, cargas de nafta, mantenimientos y (km iniciales + km de viajes).
+ * odómetro de llegada de viajes, cargas de nafta, mantenimientos y (km iniciales + km de viajes + km de jornadas).
  */
 export function odometroActual(
   moto: Moto,
   viajes: Pick<Viaje, "moto_id" | "km" | "odometro_fin">[],
   gastos: Pick<Gasto, "moto_id" | "odometro">[],
-  mants: Pick<Mantenimiento, "moto_id" | "odometro">[]
+  mants: Pick<Mantenimiento, "moto_id" | "odometro">[],
+  jornadas: { moto_id: string | null; km: number }[] = []
 ): number | null {
   const suyos = viajes.filter((v) => v.moto_id === moto.id);
+  const kmTrabajo = jornadas.filter((j) => j.moto_id === moto.id).reduce((a, j) => a + Number(j.km || 0), 0);
   const candidatos = [
     ...suyos.map((v) => v.odometro_fin),
     ...gastos.filter((g) => g.moto_id === moto.id).map((g) => g.odometro),
     ...mants.filter((m) => m.moto_id === moto.id).map((m) => m.odometro),
-    moto.km_iniciales ? moto.km_iniciales + suyos.reduce((a, v) => a + Number(v.km), 0) : null,
+    moto.km_iniciales ? moto.km_iniciales + suyos.reduce((a, v) => a + Number(v.km), 0) + kmTrabajo : null,
   ].filter((n): n is number => typeof n === "number" && n > 0);
   return candidatos.length ? Math.max(...candidatos) : null;
 }

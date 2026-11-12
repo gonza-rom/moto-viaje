@@ -35,6 +35,7 @@ const nf = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
 export function PanelGastos({
   gastos: gastosServidor,
   viajeId,
+  jornadaId,
   motoId,
   motos,
   kmViaje,
@@ -43,6 +44,8 @@ export function PanelGastos({
 }: {
   gastos: Gasto[];
   viajeId?: string;
+  /** Gastos de una jornada de trabajo */
+  jornadaId?: string;
   motoId?: string | null;
   motos?: Pick<Moto, "id" | "nombre">[];
   /** Si es de un viaje: para calcular el consumo */
@@ -158,6 +161,7 @@ export function PanelGastos({
           className="space-y-3 rounded-xl border border-linea p-4"
         >
           {viajeId && <input type="hidden" name="viaje_id" value={viajeId} />}
+          {jornadaId && <input type="hidden" name="jornada_id" value={jornadaId} />}
           {soloNafta ? (
             <input type="hidden" name="tipo" value="nafta" />
           ) : (
