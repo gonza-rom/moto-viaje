@@ -17,12 +17,13 @@ import {
   MapPin,
   Tag,
   Play,
+  Star,
   X,
 } from "lucide-react";
 import { cldMiniatura, cldOriginal, cldPoster, cldSrcSet, cldUrl, cldVideo, duracionTxt } from "@/lib/cld";
 import { agruparPorDia, fechaHoraFoto, linkMapa, type Grupo } from "@/lib/fotos";
 import { rangoFechas } from "@/lib/format";
-import { cambiarCategoria, cambiarCategoriaVarias, marcarFavorita } from "@/app/actions";
+import { cambiarCategoria, cambiarCategoriaVarias, marcarFavorita, ponerPortada } from "@/app/actions";
 import { ponerLugar } from "@/app/acciones-extra";
 import { CATEGORIAS, nombreCategoria, textoLugar, type Categoria } from "@/lib/categorias";
 import type { Foto, FotoConViaje } from "@/lib/types";
@@ -151,6 +152,21 @@ export function Galeria({
 
   // Orden de navegación del visor = orden en pantalla
   const lista = useMemo(() => grupos.flatMap((g) => g.items), [grupos]);
+
+  // Con cientos de fotos: mostrar de a tandas (el visor igual recorre todas)
+  const TANDA = 48;
+  const [limite, setLimite] = useState(TANDA);
+  useEffect(() => setLimite(TANDA), [filtro, modo]);
+  const gruposVisibles = useMemo(() => {
+    let resto = limite;
+    const out: Grupo<Item>[] = [];
+    for (const g of grupos) {
+      if (resto <= 0) break;
+      out.push({ ...g, items: g.items.slice(0, resto) });
+      resto -= g.items.length;
+    }
+    return out;
+  }, [grupos, limite]);
   const idx = abierta ? lista.findIndex((f) => f.id === abierta) : -1;
   const actual = idx >= 0 ? lista[idx] : null;
 
@@ -296,7 +312,7 @@ export function Galeria({
 
       {!lista.length && <p className="py-6 text-center text-sm text-niebla">No hay nada con ese filtro.</p>}
 
-      {grupos.map((g) => (
+      {gruposVisibles.map((g) => (
         <section key={g.clave} className="space-y-3">
           {g.titulo && (
             <div className="flex items-baseline gap-2 border-b border-linea pb-1.5">
@@ -385,6 +401,12 @@ export function Galeria({
         </section>
       ))}
 
+      {lista.length > limite && (
+        <button type="button" onClick={() => setLimite((l) => l + TANDA * 2)} className="btn-ghost w-full py-3">
+          Ver más fotos ({lista.length - limite} más)
+        </button>
+      )}
+
       {seleccion && (
         <BarraSeleccion
           ids={[...seleccion]}
@@ -425,6 +447,20 @@ export function Galeria({
               >
                 <Heart className={`size-4 ${esFav(actual) ? "fill-current" : ""}`} />
               </button>
+              )}
+              {!soloLectura && agrupar !== "viaje" && (
+                <button
+                  onClick={async () => {
+                    const r = await ponerPortada(actual.id).catch(() => ({ error: "Sin conexión" }));
+                    if (r?.error) alert(r.error);
+                    else window.location.reload();
+                  }}
+                  className="btn-ghost px-3 py-1.5"
+                  title="Usar como portada del viaje"
+                >
+                  <Star className="size-4" />
+                  <span className="hidden sm:inline">Portada</span>
+                </button>
               )}
               <a href={cldOriginal(actual)} className="btn-ghost px-3 py-1.5" title="Descargar original">
                 <Download className="size-4" />

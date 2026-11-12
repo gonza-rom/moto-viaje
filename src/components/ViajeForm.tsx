@@ -33,6 +33,9 @@ import { esKml, kmlAGpx } from "@/lib/kml";
 import { CATEGORIAS } from "@/lib/categorias";
 import { borrarBorrador, borrarPendiente, borrarPendientesDe, guardarBorrador, guardarPendiente, haceCuanto, leerBorrador, listarPendientes, type Borrador } from "@/lib/offline";
 
+/** Fotos por página en el formulario */
+const POR_PAGINA = 24;
+
 const ETIQUETAS_SUGERIDAS = ["asfalto", "ripio", "tierra", "montaña", "paso fronterizo", "lluvia", "frío", "camping", "con acompañante", "solo", "grupal"];
 import { fechaHoraFoto } from "@/lib/fotos";
 import { distanciaKm, parseGpx, type Punto } from "@/lib/gpx";
@@ -163,8 +166,11 @@ export function ViajeForm({
   const [subidas, setSubidas] = useState<Subida[]>([]);
   const [drag, setDrag] = useState(false);
   const inputFotos = useRef<HTMLInputElement>(null);
-  // Selector de archivos genérico: en Android la galería de fotos borra el GPS; el gestor de archivos a veces lo conserva
-  const inputArchivos = useRef<HTMLInputElement>(null);
+  // Fotos de a páginas: con cientos de fotos, mostrarlas todas juntas hacía la página larguísima y pesada
+  const [paginaFotos, setPaginaFotos] = useState(0);
+  const [eligiendoPortada, setEligiendoPortada] = useState(false);
+  const totalPaginas = Math.max(1, Math.ceil(fotos.length / POR_PAGINA));
+  const inicioPagina = Math.min(paginaFotos, totalPaginas - 1) * POR_PAGINA;
 
   // Km / odómetro
   const [kmTxt, setKmTxt] = useState(viaje ? String(viaje.km) : "");
@@ -883,23 +889,90 @@ export function ViajeForm({
         </div>
 
         <p className="text-xs text-niebla">
-          ¿Las fotos no toman la ubicación? El celular la borra al elegirlas desde la galería.{" "}
-          <button type="button" onClick={() => inputArchivos.current?.click()} className="font-medium text-naranja underline-offset-2 hover:underline">
-            Elegilas desde Archivos
-          </button>{" "}
-          (Archivos → Imágenes o DCIM → Camera): así puede conservarla.
-          <input
-            ref={inputArchivos}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => { if (e.target.files) agregarFotos(e.target.files); e.target.value = ""; }}
-          />
+          En Android el navegador no puede leer la ubicación de las fotos (el sistema la oculta). Después de guardar, asignales el
+          lugar desde <b>Pasaste por</b> en el viaje.
         </p>
 
-        {(fotos.length > 0 || subidas.length > 0) && (
+        {/* Subidas en curso: un resumen (con cientos de fotos, una tarjeta por foto trababa el celular) */}
+        {subidas.length > 0 && (
+          <div className="space-y-2 rounded-xl border border-linea bg-grafito/60 p-3">
+            {(() => {
+              const enCurso = subidas.filter((s) => !s.error && !s.espera);
+              const errores = subidas.filter((s) => s.error);
+              const espera = subidas.filter((s) => s.espera);
+              const pct = enCurso.length ? Math.round(enCurso.reduce((a, s) => a + s.progreso, 0) / enCurso.length) : 100;
+              return (
+                <>
+                  {enCurso.length > 0 && (
+                    <>
+                      <p className="flex items-center gap-2 text-sm">
+                        <LoaderCircle className="size-4 animate-spin text-naranja" />
+                        Subiendo {enCurso.length} {enCurso.length === 1 ? "archivo" : "archivos"}… {pct}%
+                        <span className="ml-auto text-xs text-niebla">{fotos.length} listas</span>
+                      </p>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-black/50">
+                        <div className="h-full bg-naranja transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                    </>
+                  )}
+                  {espera.length > 0 && (
+                    <p className="flex items-center gap-2 text-sm text-amber-200">
+                      <WifiOff className="size-4" /> {espera.length} {espera.length === 1 ? "foto espera" : "fotos esperan"} señal: se suben solas al volver.
+                      <button
+                        type="button"
+                        onClick={() => {
+                          espera.forEach((s) => borrarPendiente(s.key));
+                          setSubidas((x) => x.filter((y) => !y.espera));
+                        }}
+                        className="ml-auto text-xs text-white/70 underline"
+                      >
+                        Quitar
+                      </button>
+                    </p>
+                  )}
+                  {errores.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="flex items-center gap-2 text-sm text-red-300">
+                        <CircleAlert className="size-4" /> {errores.length} no se {errores.length === 1 ? "pudo" : "pudieron"} subir
+                        <button type="button" onClick={() => setSubidas((x) => x.filter((y) => !y.error))} className="ml-auto text-xs text-white/70 underline">
+                          Descartar
+                        </button>
+                      </p>
+                      <ul className="max-h-24 overflow-y-auto text-xs text-niebla">
+                        {errores.map((s) => (
+                          <li key={s.key} className="truncate">
+                            {s.nombre}: {s.error}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        )}
+
+        {fotos.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-linea p-2.5">
+            <img src={cldMiniatura(fotos[0], { w: 160, h: 160, crop: "fill" })} alt="" className="size-14 rounded-lg object-cover" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold tracking-wider text-naranja uppercase">Portada</p>
+              <p className="truncate text-xs text-niebla">La foto que se ve arriba del viaje y en la tarjeta para compartir</p>
+            </div>
+            <button type="button" onClick={() => setEligiendoPortada(true)} className="btn-ghost px-3 py-1.5 text-xs">
+              <Star className="size-3.5" /> Cambiar portada
+            </button>
+          </div>
+        )}
+
+        {fotos.length > POR_PAGINA && (
+          <Paginas pagina={paginaFotos} total={totalPaginas} onCambiar={setPaginaFotos} desde={inicioPagina + 1} hasta={Math.min(fotos.length, inicioPagina + POR_PAGINA)} de={fotos.length} />
+        )}
+
+        {fotos.length > 0 && (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {fotos.map((f, i) => (
+            {fotos.slice(inicioPagina, inicioPagina + POR_PAGINA).map((f, k) => { const i = inicioPagina + k; return (
               <li
                 key={f.public_id}
                 // Reordenar arrastrando (en computadora; en el celular están las flechas)
@@ -985,48 +1058,24 @@ export function ViajeForm({
                   ))}
                 </select>
               </li>
-            ))}
-
-            {subidas.map((s) => (
-              <li key={s.key} className="relative aspect-square overflow-hidden rounded-xl border border-linea bg-grafito">
-                {s.tipo === "video" ? (
-                  <video src={s.preview} muted playsInline preload="metadata" className="size-full object-cover opacity-40" />
-                ) : (
-                  <img src={s.preview} alt="" className="size-full object-cover opacity-40" />
-                )}
-                <div className="absolute inset-0 grid place-items-center p-3 text-center">
-                  {s.error ? (
-                    <div className="space-y-2">
-                      <p className="text-xs text-red-400">{s.error}</p>
-                      <button type="button" onClick={() => setSubidas((x) => x.filter((y) => y.key !== s.key))} className="text-xs underline">Descartar</button>
-                    </div>
-                  ) : s.espera ? (
-                    <div className="space-y-1.5 text-amber-200">
-                      <WifiOff className="mx-auto size-6" />
-                      <p className="text-xs font-medium">Esperando señal</p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          borrarPendiente(s.key);
-                          setSubidas((x) => x.filter((y) => y.key !== s.key));
-                        }}
-                        className="text-[11px] text-white/70 underline"
-                      >
-                        Quitar
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-full space-y-2">
-                      <p className="font-display text-2xl font-bold">{s.progreso}%</p>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-black/50">
-                        <div className="h-full bg-naranja transition-all" style={{ width: `${s.progreso}%` }} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </li>
-            ))}
+            ); })}
           </ul>
+        )}
+
+        {fotos.length > POR_PAGINA && (
+          <Paginas pagina={paginaFotos} total={totalPaginas} onCambiar={setPaginaFotos} desde={inicioPagina + 1} hasta={Math.min(fotos.length, inicioPagina + POR_PAGINA)} de={fotos.length} />
+        )}
+
+        {eligiendoPortada && (
+          <ElegirPortada
+            fotos={fotos}
+            onElegir={(i) => {
+              if (i > 0) portada(i);
+              setEligiendoPortada(false);
+              setPaginaFotos(0);
+            }}
+            onCerrar={() => setEligiendoPortada(false)}
+          />
         )}
       </section>
 
@@ -1051,5 +1100,91 @@ export function ViajeForm({
         <GuardarBtn pending={pendiente || !!estado?.ir} bloqueado={subiendo} esperando={subidas.some((x) => x.espera)} editando={!!viaje} />
       </div>
     </form>
+  );
+}
+
+/** Navegación entre páginas de fotos: ‹ 1 2 3 … › */
+function Paginas({
+  pagina,
+  total,
+  onCambiar,
+  desde,
+  hasta,
+  de,
+}: {
+  pagina: number;
+  total: number;
+  onCambiar: (p: number) => void;
+  desde: number;
+  hasta: number;
+  de: number;
+}) {
+  const actual = Math.min(pagina, total - 1);
+  // Números visibles: primera, última y las vecinas de la actual
+  const nums = [...new Set([0, actual - 1, actual, actual + 1, total - 1])].filter((n) => n >= 0 && n < total).sort((a, b) => a - b);
+  const btn = "grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-semibold";
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="mr-auto text-xs text-niebla">
+        {desde}–{hasta} de {de}
+      </span>
+      <button type="button" disabled={actual === 0} onClick={() => onCambiar(actual - 1)} className={`${btn} border border-linea disabled:opacity-30`} aria-label="Página anterior">
+        <ChevronLeft className="size-4" />
+      </button>
+      {nums.map((n, i) => (
+        <span key={n} className="flex items-center gap-1.5">
+          {i > 0 && n - nums[i - 1] > 1 && <span className="text-xs text-niebla">…</span>}
+          <button
+            type="button"
+            onClick={() => onCambiar(n)}
+            aria-current={n === actual ? "page" : undefined}
+            className={`${btn} ${n === actual ? "bg-naranja text-black" : "border border-linea text-niebla hover:text-white"}`}
+          >
+            {n + 1}
+          </button>
+        </span>
+      ))}
+      <button type="button" disabled={actual >= total - 1} onClick={() => onCambiar(actual + 1)} className={`${btn} border border-linea disabled:opacity-30`} aria-label="Página siguiente">
+        <ChevronRight className="size-4" />
+      </button>
+    </div>
+  );
+}
+
+/** Elegir la portada tocando una foto (miniaturas chicas, de a 60) */
+function ElegirPortada({ fotos, onElegir, onCerrar }: { fotos: FotoDraft[]; onElegir: (i: number) => void; onCerrar: () => void }) {
+  const [hasta, setHasta] = useState(60);
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 sm:items-center" onClick={onCerrar}>
+      <div className="card flex max-h-[88dvh] w-full max-w-2xl flex-col gap-3 rounded-b-none p-4 sm:rounded-b-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2">
+          <h2 className="font-display text-2xl font-bold uppercase">Elegí la portada</h2>
+          <button type="button" onClick={onCerrar} className="btn-ghost ml-auto px-2.5 py-1.5" aria-label="Cerrar">
+            <X className="size-4" />
+          </button>
+        </div>
+        <ul className="grid min-h-0 grid-cols-3 gap-1.5 overflow-y-auto sm:grid-cols-5">
+          {fotos.slice(0, hasta).map((f, i) => (
+            <li key={f.public_id}>
+              <button
+                type="button"
+                onClick={() => onElegir(i)}
+                className={`relative block aspect-square w-full overflow-hidden rounded-lg ${i === 0 ? "ring-3 ring-naranja" : "hover:opacity-80"}`}
+              >
+                <img src={cldMiniatura(f, { w: 200, h: 200, crop: "fill" })} alt="" loading="lazy" className="size-full object-cover" />
+                {i === 0 && <span className="absolute top-1 left-1 rounded-full bg-naranja px-1.5 py-0.5 text-[9px] font-bold text-black uppercase">Actual</span>}
+              </button>
+            </li>
+          ))}
+          {hasta < fotos.length && (
+            <li className="col-span-full">
+              <button type="button" onClick={() => setHasta((h) => h + 60)} className="btn-ghost w-full py-2 text-sm">
+                Ver más ({fotos.length - hasta})
+              </button>
+            </li>
+          )}
+        </ul>
+      </div>
+    </div>
   );
 }

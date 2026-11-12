@@ -327,6 +327,19 @@ export async function eliminarViaje(id: string) {
 
 /* ───────────── Fotos ───────────── */
 
+/** Pone una foto como portada del viaje (queda primera en el orden) */
+export async function ponerPortada(id: string): Promise<Estado> {
+  await requerirSesion();
+  const { data: f, error } = await db().from("fotos").select("viaje_id").eq("id", id).single();
+  if (error || !f) return { error: "No se encontró la foto" };
+  const { data: primera } = await db().from("fotos").select("orden").eq("viaje_id", f.viaje_id).order("orden").limit(1);
+  const { error: e2 } = await db().from("fotos").update({ orden: (primera?.[0]?.orden ?? 0) - 1 }).eq("id", id);
+  if (e2) return { error: mensaje(e2, "cambiar la portada") };
+  revalidatePath("/");
+  revalidatePath("/viajes");
+  return { ok: "Portada cambiada" };
+}
+
 export async function marcarFavorita(id: string, favorita: boolean): Promise<Estado> {
   await requerirSesion();
   const { data, error } = await db().from("fotos").update({ favorita }).eq("id", id).select("viaje_id").single();
