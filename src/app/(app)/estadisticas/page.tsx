@@ -20,6 +20,7 @@ import { dias, km, num, rangoFechas } from "@/lib/format";
 import { labelGasto, plata, resumirGastos } from "@/lib/gastos";
 import { MapaProvincias } from "@/components/MapaProvincias";
 import { BotonTarjeta } from "@/components/BotonTarjeta";
+import { EspacioFotos } from "@/components/EspacioFotos";
 import type { ViajeConRelaciones } from "@/lib/types";
 
 export const metadata = { title: "Estadísticas" };
@@ -270,6 +271,8 @@ export default async function Estadisticas() {
           </div>
         </section>
       )}
+
+      <EspacioFotos />
     </div>
   );
 }

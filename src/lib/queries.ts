@@ -1,5 +1,5 @@
 import "server-only";
-import { db } from "./supabase";
+import { db, traerTodo } from "./supabase";
 import type { FotoConViaje, Gasto, Jornada, Mantenimiento, Moto, Plan, ViajeConRelaciones } from "./types";
 
 const SELECT_VIAJE = "*, motos(id, nombre), fotos(*)";
@@ -28,12 +28,11 @@ export async function getViaje(id: string): Promise<ViajeConRelaciones | null> {
 
 /** Todas las fotos y videos con su viaje: del viaje más nuevo al más viejo, y en el orden elegido */
 export async function getFotos(): Promise<FotoConViaje[]> {
-  const { data, error } = await db()
-    .from("fotos")
-    .select("*, viajes(id, titulo, fecha_inicio, fecha_fin, moto_id)")
-    .limit(5000);
-  if (error) throw new Error(error.message);
-  return (data as FotoConViaje[]).sort(
+  // De a 1000: la base no devuelve más de 1000 filas por pedido
+  const data = await traerTodo<FotoConViaje>((desde, hasta) =>
+    db().from("fotos").select("*, viajes(id, titulo, fecha_inicio, fecha_fin, moto_id)").order("id").range(desde, hasta)
+  );
+  return data.sort(
     (a, b) =>
       (b.viajes?.fecha_inicio ?? "").localeCompare(a.viajes?.fecha_inicio ?? "") ||
       (a.viaje_id < b.viaje_id ? -1 : a.viaje_id > b.viaje_id ? 1 : 0) ||

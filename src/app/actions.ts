@@ -3,7 +3,7 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { db } from "@/lib/supabase";
+import { db, enTandas } from "@/lib/supabase";
 import { borrarMedios, borrarRaw } from "@/lib/cloudinary";
 import { SESSION_COOKIE, safeEqual, sessionToken } from "@/lib/auth";
 import { requerirSesion } from "@/lib/sesion";
@@ -289,7 +289,7 @@ export async function actualizarViaje(id: string, _prev: Estado, fd: FormData): 
     const idsQuedan = new Set(fotos.filter((f) => f.id).map((f) => f.id));
     const eliminar = existentes.filter((f) => !idsQuedan.has(f.id));
     if (eliminar.length) {
-      await db().from("fotos").delete().in("id", eliminar.map((f) => f.id));
+      await enTandas(eliminar.map((f) => f.id), (lote) => db().from("fotos").delete().in("id", lote));
       await borrarMedios(eliminar);
     }
     if (actual.gpx_public_id && actual.gpx_public_id !== datos.gpx_public_id) {
@@ -361,9 +361,9 @@ export async function cambiarCategoriaVarias(ids: string[], categoria: string | 
   await requerirSesion();
   if (categoria !== null && !esCategoria(categoria)) return { error: "Categoría inválida" };
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const validos = (Array.isArray(ids) ? ids : []).filter((x) => typeof x === "string" && UUID.test(x)).slice(0, 500);
+  const validos = (Array.isArray(ids) ? ids : []).filter((x) => typeof x === "string" && UUID.test(x)).slice(0, 5000);
   if (!validos.length) return { error: "No hay fotos seleccionadas" };
-  const { error } = await db().from("fotos").update({ categoria }).in("id", validos);
+  const { error } = await enTandas(validos, (lote) => db().from("fotos").update({ categoria }).in("id", lote));
   if (error) return { error: mensaje(error, "cambiar la categoría") };
   return { ok: "Categoría guardada" };
 }
@@ -420,6 +420,26 @@ export async function eliminarMoto(id: string) {
  * Borra de Cloudinary un archivo subido en el formulario y quitado antes de guardar.
  * Solo si no está en la base (nunca borra fotos de viajes guardados).
  */
+/** Varias subidas que no quedaron en ningún viaje (al descartar un borrador). Solo borra las que no están en la base. */
+export async function descartarSubidas(items: { public_id: string; tipo: "image" | "video" }[]) {
+  await requerirSesion();
+  const pref = `${process.env.CLOUDINARY_FOLDER || "moto-viajes"}/`;
+  const lista = (Array.isArray(items) ? items : []).filter((x) => typeof x?.public_id === "string" && x.public_id.startsWith(pref)).slice(0, 3000);
+  if (!lista.length) return;
+  const enUso = new Set<string>();
+  const { error } = await enTandas(
+    lista.map((x) => x.public_id),
+    async (lote) => {
+      const r = await db().from("fotos").select("public_id").in("public_id", lote);
+      r.data?.forEach((f) => enUso.add(f.public_id));
+      return { error: r.error };
+    },
+    150
+  );
+  if (error) return; // ante cualquier error de la base, no borrar nada
+  await borrarMedios(lista.filter((x) => !enUso.has(x.public_id)).map((x) => ({ public_id: x.public_id, tipo: x.tipo === "video" ? "video" : "image" })));
+}
+
 export async function descartarSubida(publicId: string, tipo: "image" | "video" | "raw") {
   await requerirSesion();
   if (typeof publicId !== "string" || !publicId.startsWith(`${process.env.CLOUDINARY_FOLDER || "moto-viajes"}/`)) return;

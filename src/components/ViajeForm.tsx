@@ -2,7 +2,7 @@
 
 import { startTransition, useActionState, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { descartarSubida, type Estado } from "@/app/actions";
+import { descartarSubida, descartarSubidas, type Estado } from "@/app/actions";
 import {
   CircleAlert,
   ChevronLeft,
@@ -273,6 +273,7 @@ export function ViajeForm({
           categoria: null,
         },
       ]);
+      yaAgregados.current.set(huellaArchivo(file), res.public_id);
       setSubidas((s) => s.filter((x) => x.key !== sub.key));
       URL.revokeObjectURL(sub.preview);
       borrarPendiente(sub.key);
@@ -283,6 +284,7 @@ export function ViajeForm({
         await guardarPendiente({ id: sub.key, borrador: claveBorrador, file, nombre: sub.nombre, tipo: sub.tipo, creado: Date.now() });
         setSubidas((s) => s.map((x) => (x.key === sub.key ? { ...x, espera: true } : x)));
       } else {
+        yaAgregados.current.delete(huellaArchivo(file)); // falló: se puede volver a elegir
         setSubidas((s) => s.map((x) => (x.key === sub.key ? { ...x, error: (e as Error).message } : x)));
       }
     } finally {
@@ -302,9 +304,44 @@ export function ViajeForm({
     await Promise.all([worker(), worker(), worker()]);
   }
 
+  // Archivos ya agregados en esta sesión (nombre + tamaño + fecha del archivo): no subirlos dos veces
+  // huella del archivo → public_id de la foto subida ("" mientras sube)
+  const yaAgregados = useRef(new Map<string, string>());
+  const huellaArchivo = (f: File) => `${f.name}|${f.size}|${f.lastModified}`;
+  const [revisando, setRevisando] = useState(false);
+
   async function agregarFotos(lista: FileList | File[]) {
-    const files = Array.from(lista).filter((f) => esImagen(f) || esVideo(f));
+    let files = Array.from(lista).filter((f) => esImagen(f) || esVideo(f));
     if (!files.length) return;
+
+    // 1) El mismo archivo elegido otra vez en este formulario
+    const huella = huellaArchivo;
+    const repetidosSesion = files.filter((f) => yaAgregados.current.has(huella(f)));
+    files = files.filter((f) => !yaAgregados.current.has(huella(f)));
+
+    // 2) Fotos que ya están en el viaje: misma fecha y hora de la cámara (al segundo)
+    const horas = new Set(fotos.map((f) => f.tomada_en).filter(Boolean));
+    let repetidosViaje: File[] = [];
+    if (horas.size && files.length) {
+      setRevisando(true);
+      const metas = await Promise.all(files.map((f) => (esImagen(f) ? leerExif(f).catch(() => null) : null)));
+      setRevisando(false);
+      repetidosViaje = files.filter((_, i) => metas[i]?.tomada_en && horas.has(metas[i]!.tomada_en));
+      if (
+        repetidosViaje.length &&
+        !confirm(
+          `${repetidosViaje.length} de las fotos elegidas ya están en el viaje (misma fecha y hora).\n\n` +
+            `Aceptar: subirlas igual · Cancelar: saltear las repetidas`
+        )
+      ) {
+        files = files.filter((f) => !repetidosViaje.includes(f));
+      }
+    }
+    if (repetidosSesion.length) {
+      alert(`${repetidosSesion.length} ${repetidosSesion.length === 1 ? "foto ya estaba agregada" : "fotos ya estaban agregadas"}: no se suben de nuevo.`);
+    }
+    if (!files.length) return;
+    files.forEach((f) => yaAgregados.current.set(huella(f), ""));
 
     const nuevas: Subida[] = files.map((f) => {
       const tipo: TipoMedio = esVideo(f) ? "video" : "image";
@@ -488,6 +525,8 @@ export function ViajeForm({
   function quitarFoto(i: number) {
     const f = fotos[i];
     if (f && !f.id) descartarSubida(f.public_id, f.tipo).catch(() => {});
+    // Si se quita, se puede volver a agregar el mismo archivo
+    for (const [k, v] of yaAgregados.current) if (v === f?.public_id) yaAgregados.current.delete(k);
     setFotos((x) => x.filter((_, j) => j !== i));
   }
 
@@ -603,6 +642,12 @@ export function ViajeForm({
   }
 
   function descartarBorrador() {
+    // Las fotos que ese borrador ya había subido y nunca se guardaron quedaban sueltas en Cloudinary
+    // (ocupando espacio). El servidor solo borra las que no están en ningún viaje.
+    const b = borradorPrevio as (Borrador & { fotos?: FotoDraft[]; gpx?: { public_id?: string } | null }) | null;
+    const sueltas = (Array.isArray(b?.fotos) ? b.fotos : []).filter((f) => !f.id && typeof f.public_id === "string");
+    if (sueltas.length) descartarSubidas(sueltas.map((f) => ({ public_id: f.public_id, tipo: f.tipo === "video" ? "video" : "image" }))).catch(() => {});
+    if (b?.gpx?.public_id && b.gpx.public_id !== viaje?.gpx_public_id) descartarSubida(b.gpx.public_id, "raw").catch(() => {});
     borrarBorrador(claveBorrador);
     borrarPendientesDe(claveBorrador);
     setBorradorPrevio(null);
@@ -934,6 +979,12 @@ export function ViajeForm({
           En Android el navegador no puede leer la ubicación de las fotos (el sistema la oculta, también desde Archivos). Después de
           guardar, asignales el lugar desde <b>Pasaste por</b> en el viaje.
         </p>
+
+        {revisando && (
+          <p className="flex items-center gap-2 text-sm text-niebla">
+            <LoaderCircle className="size-4 animate-spin text-naranja" /> Revisando si alguna foto ya está en el viaje…
+          </p>
+        )}
 
         {/* Subidas en curso: un resumen (con cientos de fotos, una tarjeta por foto trababa el celular) */}
         {subidas.length > 0 && (
