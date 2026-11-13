@@ -60,6 +60,8 @@ type Firma = {
   apiKey: string;
   cloudName: string;
   resourceType: "image" | "video" | "raw";
+  /** Fotos: se guardan optimizadas (lo firma el servidor) */
+  transformation?: string;
 };
 
 type Resultado = { public_id: string; secure_url: string; width?: number; height?: number; duration?: number };
@@ -87,6 +89,7 @@ function enviarParte(
     fd.append("timestamp", String(firma.timestamp));
     fd.append("signature", firma.signature);
     fd.append("folder", firma.folder);
+    if (firma.transformation) fd.append("transformation", firma.transformation);
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `https://api.cloudinary.com/v1_1/${firma.cloudName}/${firma.resourceType}/upload`);

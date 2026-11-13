@@ -6,7 +6,20 @@ export type TipoMedio = "image" | "video";
 
 type Opts = { w?: number; h?: number; crop?: "fill" | "limit"; dpr?: boolean };
 
-function transformaciones({ w, h, crop = "limit", dpr = true }: Opts) {
+/**
+ * Cada combinación distinta de tamaño/formato es una "transformación" que Cloudinary cobra en créditos
+ * (1 crédito = 1000 transformaciones). Para gastar menos se usan pocos tamaños fijos:
+ * miniaturas cuadradas de 400, galería de 700, visor de 800/1600/2400. Sin dpr_auto (multiplicaba
+ * las versiones por cada densidad de pantalla): los tamaños ya alcanzan para pantallas 2x.
+ */
+function normalizar({ w, h, crop = "limit", dpr = false }: Opts): Opts {
+  if (crop === "fill" && w && h && w === h && w <= 400) return { w: 400, h: 400, crop, dpr: false };
+  if (crop === "limit" && w && !h && w <= 700) return { w: 700, crop, dpr: false };
+  return { w, h, crop, dpr };
+}
+
+function transformaciones(opts: Opts) {
+  const { w, h, crop = "limit", dpr = false } = normalizar(opts);
   const t = ["f_auto", "q_auto"];
   if (dpr) t.push("dpr_auto");
   t.push(`c_${crop}`);
@@ -21,7 +34,7 @@ export function cldUrl(publicId: string, opts: Opts = {}) {
 }
 
 /** srcSet responsive sin recorte, para que el navegador elija el tamaño */
-export function cldSrcSet(publicId: string, widths = [480, 800, 1200, 1600, 2400]) {
+export function cldSrcSet(publicId: string, widths = [800, 1600, 2400]) {
   return widths.map((w) => `${cldUrl(publicId, { w, dpr: false })} ${w}w`).join(", ");
 }
 

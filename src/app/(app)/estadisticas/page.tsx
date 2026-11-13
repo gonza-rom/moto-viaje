@@ -169,7 +169,7 @@ export default async function Estadisticas() {
           {records
             .filter((x) => x.r)
             .map(({ icono: Icono, label, r: rec, fmt }) => (
-              <Link key={label} href={`/viajes/${rec!.x.id}`} className="card group space-y-1 p-4 hover:border-niebla/60">
+              <Link key={label} href={`/viajes/${rec!.x.id}`} className="card group block min-w-0 space-y-1 p-4 hover:border-niebla/60">
                 <p className="flex items-center gap-1.5 text-xs text-niebla">
                   <Icono className="size-3.5" /> {label}
                 </p>

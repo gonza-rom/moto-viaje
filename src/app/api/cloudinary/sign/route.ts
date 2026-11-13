@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cloudinary, CLD_FOLDER } from "@/lib/cloudinary";
+import { cloudinary, CLD_FOLDER, TRANSFORMACION_FOTO } from "@/lib/cloudinary";
 
 const TIPOS = {
   foto: { folder: "fotos", resourceType: "image" },
@@ -16,6 +16,8 @@ export async function POST(req: Request) {
   const timestamp = Math.round(Date.now() / 1000);
 
   const params: Record<string, string | number> = { folder, timestamp };
+  // Las fotos se guardan ya optimizadas (ver TRANSFORMACION_FOTO); videos y GPX, tal cual
+  if (cfg.resourceType === "image") params.transformation = TRANSFORMACION_FOTO;
   const signature = cloudinary.utils.api_sign_request(params, process.env.CLOUDINARY_API_SECRET!);
 
   return NextResponse.json({
@@ -25,5 +27,6 @@ export async function POST(req: Request) {
     apiKey: process.env.CLOUDINARY_API_KEY,
     cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
     resourceType: cfg.resourceType,
+    ...(params.transformation ? { transformation: params.transformation } : {}),
   });
 }

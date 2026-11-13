@@ -10,6 +10,7 @@ type Firma = {
   timestamp: number;
   folder: string;
   allowed_formats: string;
+  transformation: string;
   apiKey: string;
   cloudName: string;
 };
@@ -27,6 +28,7 @@ function subir(file: File, f: Firma, onProgress: (p: number) => void): Promise<{
     fd.append("signature", f.signature);
     fd.append("folder", f.folder);
     fd.append("allowed_formats", f.allowed_formats);
+    fd.append("transformation", f.transformation);
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `https://api.cloudinary.com/v1_1/${f.cloudName}/image/upload`);
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));

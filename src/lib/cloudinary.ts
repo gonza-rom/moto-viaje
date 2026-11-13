@@ -10,6 +10,13 @@ cloudinary.config({
 
 export const CLD_FOLDER = process.env.CLOUDINARY_FOLDER || "moto-viajes";
 
+/**
+ * Cómo se guardan las fotos al subirlas: hasta 3072 px del lado más largo (9 megapíxeles) y calidad
+ * automática "buena". Se ven igual en el celular y en la compu y ocupan ~83 % menos que el original
+ * (medido con fotos reales: 4,1 MB → 0,7 MB). El plan gratis de Cloudinary tiene 25 créditos por mes.
+ */
+export const TRANSFORMACION_FOTO = "c_limit,w_3072,h_3072,q_auto:good";
+
 /** Borra fotos y videos de Cloudinary (agrupa por resource_type) */
 export async function borrarMedios(medios: { public_id: string; tipo?: string | null }[]) {
   for (const tipo of ["image", "video"] as const) {

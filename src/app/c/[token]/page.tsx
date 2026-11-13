@@ -46,7 +46,7 @@ export default async function ViajeCompartido({ params }: Props) {
         {portada ? (
           <img
             src={cldMiniatura(portada, { w: 1600, h: 800, crop: "fill" })}
-            srcSet={portada.tipo === "video" ? undefined : cldSrcSet(portada.public_id, [800, 1200, 1600, 2400])}
+            srcSet={portada.tipo === "video" ? undefined : cldSrcSet(portada.public_id)}
             sizes="(min-width: 1024px) 1024px, 100vw"
             alt={v.titulo}
             className="aspect-[4/3] w-full object-cover sm:aspect-[2/1]"
